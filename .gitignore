@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local-only demo assets
+public/scenes/local-test/*.png
+!public/scenes/local-test/.gitkeep

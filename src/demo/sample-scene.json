@@ -127,19 +127,35 @@
       "id": "eyebrow",
       "style": "eyebrow",
       "region": "sky",
-      "text": "SAN FRANCISCO BAY"
+      "text": "SAN FRANCISCO BAY",
+      "scroll": {
+        "mode": "reveal",
+        "start": 0,
+        "end": 0.3
+      }
     },
     {
       "id": "headline",
       "style": "heading",
       "region": "sky",
-      "text": "Bridge into haze."
+      "text": "Bridge into haze.",
+      "scroll": {
+        "mode": "sticky-start-reveal",
+        "start": 0.12,
+        "end": 0.58,
+        "stickyTop": 22
+      }
     },
     {
       "id": "body",
       "style": "body",
       "region": "water",
-      "text": "Two transparent regions keep the skyline and bridge in front while the copy lands in the cleared sky and water."
+      "text": "Two transparent regions keep the skyline and bridge in front while the copy lands in the cleared sky and water.",
+      "scroll": {
+        "mode": "reveal",
+        "start": 0.45,
+        "end": 1
+      }
     }
   ]
 }

@@ -36,15 +36,40 @@ vi.mock('@chenglou/pretext', () => ({
   },
 }))
 
+const mountEngine = async (
+  scene = createScene(),
+  options?: { injectStyles?: boolean; initialProgress?: number },
+): Promise<{
+  container: HTMLDivElement
+  engine: ReturnType<typeof createPretextImageEngine>
+  stage: HTMLElement
+}> => {
+  const container = document.createElement('div')
+  document.body.append(container)
+
+  const engine = createPretextImageEngine(container, scene, options)
+  await engine.ready
+
+  const stage = container.querySelector<HTMLElement>('.pie-stage')
+
+  expect(stage).not.toBeNull()
+  setElementSize(stage!, 220, 420)
+  engine.render()
+
+  return { container, engine, stage: stage! }
+}
+
+const getMaskedLines = (container: HTMLElement): HTMLElement[] =>
+  [...container.querySelectorAll<HTMLElement>('.pie-line-layer .pie-line')]
+
+const getVisibleMaskedLines = (container: HTMLElement): HTMLElement[] =>
+  getMaskedLines(container).filter((line) => !line.hidden)
+
 describe('PretextImageEngine', () => {
   it('updates object-fit when the scene changes without changing asset URLs', async () => {
-    const container = document.createElement('div')
-    const engine = createPretextImageEngine(container, createScene())
-    await engine.ready
+    const { container, engine, stage } = await mountEngine(createScene())
 
-    const stage = container.querySelector<HTMLElement>('.pie-stage')
-    expect(stage).not.toBeNull()
-    setElementSize(stage!, 900, 600)
+    setElementSize(stage, 900, 600)
     engine.render()
 
     const baseImage = container.querySelector<HTMLImageElement>('.pie-base')
@@ -68,9 +93,7 @@ describe('PretextImageEngine', () => {
   })
 
   it('exposes scene alt text on the rendered stage', async () => {
-    const container = document.createElement('div')
-    const engine = createPretextImageEngine(
-      container,
+    const { container } = await mountEngine(
       createScene({
         meta: {
           name: 'Accessibility scene',
@@ -78,7 +101,6 @@ describe('PretextImageEngine', () => {
         },
       }),
     )
-    await engine.ready
 
     const stage = container.querySelector<HTMLElement>('.pie-stage')
 
@@ -87,18 +109,13 @@ describe('PretextImageEngine', () => {
   })
 
   it('uses the clamped font metrics when painting masked lines', async () => {
-    const container = document.createElement('div')
-    const engine = createPretextImageEngine(
-      container,
+    const { container, engine, stage } = await mountEngine(
       createScene({
         blocks: [{ style: 'heading', text: 'Masked headline' }],
       }),
     )
-    await engine.ready
 
-    const stage = container.querySelector<HTMLElement>('.pie-stage')
-    expect(stage).not.toBeNull()
-    setElementSize(stage!, 2000, 1200)
+    setElementSize(stage, 2000, 1200)
     engine.render()
 
     const line = container.querySelector<HTMLElement>('.pie-line')
@@ -111,9 +128,7 @@ describe('PretextImageEngine', () => {
   it('keeps fallback disabled when fallbackMode is none', async () => {
     setCanvasState({ overlayAlpha: 255 })
 
-    const container = document.createElement('div')
-    const engine = createPretextImageEngine(
-      container,
+    const { container, engine, stage } = await mountEngine(
       createScene({
         resize: {
           preserveFullText: true,
@@ -121,11 +136,8 @@ describe('PretextImageEngine', () => {
         },
       }),
     )
-    await engine.ready
 
-    const stage = container.querySelector<HTMLElement>('.pie-stage')
-    expect(stage).not.toBeNull()
-    setElementSize(stage!, 720, 540)
+    setElementSize(stage, 720, 540)
     engine.render()
 
     const fallback = container.querySelector<HTMLElement>('.pie-fallback')
@@ -134,5 +146,198 @@ describe('PretextImageEngine', () => {
     expect(engine.state.layoutMode).toBe('masked')
     expect(fallback?.hidden).toBe(true)
     expect(status?.textContent).toBe('No readable slots were available inside the overlay.')
+  })
+
+  it('keeps static blocks visible regardless of progress changes', async () => {
+    const { container, engine } = await mountEngine(
+      createScene({
+        blocks: [{ id: 'static-copy', style: 'body', text: 'Static masked copy remains visible.' }],
+      }),
+    )
+
+    expect(getVisibleMaskedLines(container).length).toBeGreaterThan(0)
+
+    engine.setProgress(0)
+
+    expect(getVisibleMaskedLines(container).length).toBeGreaterThan(0)
+  })
+
+  it('reveals scroll-enabled lines deterministically across progress values', async () => {
+    const { container, engine } = await mountEngine(
+      createScene({
+        blocks: [
+          {
+            id: 'reveal-copy',
+            style: 'body',
+            text: 'One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen.',
+            scroll: {
+              mode: 'reveal',
+              start: 0,
+              end: 1,
+            },
+          },
+        ],
+      }),
+      { initialProgress: 0 },
+    )
+
+    const totalLines = getMaskedLines(container).length
+
+    expect(totalLines).toBeGreaterThan(2)
+    expect(getVisibleMaskedLines(container)).toHaveLength(1)
+
+    engine.setProgress(0.4)
+    expect(getVisibleMaskedLines(container)).toHaveLength(Math.floor(totalLines * 0.4) + 1)
+
+    engine.setProgress(1)
+    expect(getVisibleMaskedLines(container)).toHaveLength(totalLines)
+  })
+
+  it('keeps the first line in a sticky overlay while the block is active', async () => {
+    const { container, engine } = await mountEngine(
+      createScene({
+        blocks: [
+          {
+            id: 'hero',
+            style: 'heading',
+            text: 'Sticky intro lines stay readable while the reveal continues below.',
+            scroll: {
+              mode: 'sticky-start-reveal',
+              start: 0.1,
+              end: 0.8,
+              stickyTop: 18,
+            },
+          },
+        ],
+      }),
+      { initialProgress: 0.5 },
+    )
+
+    const originalFirstLine = container.querySelector<HTMLElement>('.pie-line-layer .pie-line[data-line-id="hero-line-0"]')
+    const stickyLine = container.querySelector<HTMLElement>('.pie-sticky-line')
+
+    expect(originalFirstLine).not.toBeNull()
+    expect(stickyLine).not.toBeNull()
+    expect(originalFirstLine?.hidden).toBe(true)
+    expect(stickyLine?.textContent).toBe(originalFirstLine?.textContent)
+    expect(stickyLine?.style.top).toBe('18px')
+
+    engine.setProgress(1)
+
+    expect(container.querySelector('.pie-sticky-line')).toBeNull()
+  })
+
+  it('preserves current progress across resize-driven relayout', async () => {
+    const { container, engine, stage } = await mountEngine(
+      createScene({
+        blocks: [
+          {
+            id: 'resizable',
+            style: 'body',
+            text: 'Resize should keep scroll progress stable even when line breaks change dramatically across multiple relayout passes in the same scene.',
+            scroll: {
+              mode: 'reveal',
+              start: 0,
+              end: 1,
+            },
+          },
+        ],
+      }),
+    )
+
+    engine.setProgress(0.35)
+
+    setElementSize(stage, 260, 420)
+    engine.render()
+
+    expect(engine.state.progress).toBe(0.35)
+    expect(getVisibleMaskedLines(container).length).toBeGreaterThan(0)
+    expect(getVisibleMaskedLines(container).length).toBeLessThan(getMaskedLines(container).length)
+  })
+
+  it('preserves current progress when updating to a new scene', async () => {
+    const { container, engine } = await mountEngine(
+      createScene({
+        blocks: [
+          {
+            id: 'before',
+            style: 'body',
+            text: 'Initial reveal copy for progress preservation.',
+            scroll: {
+              mode: 'reveal',
+              start: 0,
+              end: 1,
+            },
+          },
+        ],
+      }),
+    )
+
+    engine.setProgress(0.5)
+
+    await engine.update(
+      createScene({
+        blocks: [
+          {
+            id: 'after',
+            style: 'body',
+            text: 'Updated reveal copy should reuse the existing normalized progress value.',
+            scroll: {
+              mode: 'reveal',
+              start: 0,
+              end: 1,
+            },
+          },
+        ],
+      }),
+    )
+
+    expect(engine.state.progress).toBe(0.5)
+    expect(getVisibleMaskedLines(container).length).toBeGreaterThan(0)
+    expect(getVisibleMaskedLines(container).length).toBeLessThan(getMaskedLines(container).length)
+  })
+
+  it('clamps engine progress and normalizes invalid block ranges', async () => {
+    const { container, engine } = await mountEngine(
+      createScene({
+        blocks: [
+          {
+            id: 'instant',
+            style: 'body',
+            text: 'Invalid ranges become instant reveal at the normalized start point.',
+            scroll: {
+              mode: 'reveal',
+              start: 2,
+              end: -1,
+            },
+          },
+        ],
+      }),
+      { initialProgress: -1 },
+    )
+
+    expect(engine.state.progress).toBe(0)
+    expect(getVisibleMaskedLines(container)).toHaveLength(0)
+
+    engine.setProgress(2)
+
+    expect(engine.state.progress).toBe(1)
+    expect(getVisibleMaskedLines(container).length).toBe(getMaskedLines(container).length)
+  })
+
+  it('supports explicit CSS delivery and optional runtime style injection', async () => {
+    await mountEngine(createScene())
+    expect(document.getElementById('pretext-image-engine-styles')).not.toBeNull()
+
+    document.getElementById('pretext-image-engine-styles')?.remove()
+
+    await mountEngine(createScene(), { injectStyles: false })
+    expect(document.getElementById('pretext-image-engine-styles')).toBeNull()
+  })
+
+  it('throws a clear error when instantiated without a usable DOM container', () => {
+    expect(() => {
+      createPretextImageEngine({ ownerDocument: null } as unknown as HTMLElement, createScene())
+    }).toThrow(/requires a browser dom container/i)
   })
 })

@@ -5,6 +5,7 @@ export type {
   ColumnSplitConfig,
   CSSColorValue,
   DebugConfig,
+  EngineOptions,
   EngineState,
   HighlightConfig,
   ImageEngineSceneConfig,
@@ -17,6 +18,8 @@ export type {
   SceneMeta,
   StageConfig,
   TextBlockConfig,
+  TextBlockScrollConfig,
+  TextBlockScrollMode,
   TextColorConfig,
   TextStyleName,
 } from './types'

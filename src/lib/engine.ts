@@ -12,10 +12,12 @@ import {
   DEFAULT_SHADOW,
   DEFAULT_STAGE,
 } from './defaults'
+import { ENGINE_CSS, ENGINE_STYLE_ID } from './styles'
 import type {
   BlockStyleConfig,
   ColumnSplitConfig,
   ColorConfig,
+  EngineOptions,
   EngineState,
   HighlightConfig,
   ImageEngineSceneConfig,
@@ -26,6 +28,8 @@ import type {
   SelectionConfig,
   ShadowConfig,
   TextBlockConfig,
+  TextBlockScrollConfig,
+  TextBlockScrollMode,
 } from './types'
 
 type ResolvedBlockStyle = Omit<Required<BlockStyleConfig>, 'highlight' | 'columns'> & {
@@ -37,11 +41,19 @@ type ResolvedRegion = Omit<Required<RegionConfig>, 'columnSplit'> & {
   columnSplit: Required<ColumnSplitConfig>
 }
 
+type ResolvedBlockScroll = {
+  mode: TextBlockScrollMode
+  start: number
+  end: number
+  stickyTop: number
+}
+
 type ResolvedAssets = Required<ImageEngineSceneConfig['assets']>
 type ResolvedStage = Required<NonNullable<ImageEngineSceneConfig['stage']>>
 type ResolvedLayout = Required<NonNullable<ImageEngineSceneConfig['layout']>>
 type ResolvedResize = Required<NonNullable<ImageEngineSceneConfig['resize']>>
 type ResolvedDebug = Required<NonNullable<ImageEngineSceneConfig['debug']>>
+type ResolvedOptions = Required<EngineOptions>
 type ResolvedColors = {
   text: Required<NonNullable<ColorConfig['text']>>
   highlight: Required<HighlightConfig>
@@ -69,174 +81,39 @@ type Slot = {
   right: number
 }
 
-type PositionedLine = {
+type LayoutLine = {
+  id: string
+  blockId: string
+  blockIndex: number
+  lineIndex: number
   text: string
   x: number
   y: number
   width: number
   styleName: string
   style: ResolvedBlockStyle
+  fontSize: number
+  lineHeightPx: number
   appearance: LineAppearance
+  scroll: ResolvedBlockScroll
+  revealThreshold: number
 }
 
-type LayoutResult = {
-  lines: PositionedLine[]
+type LayoutBlock = {
+  id: string
+  blockIndex: number
+  scroll: ResolvedBlockScroll
+  firstLineId: string | null
+}
+
+type MaskedLayoutResult = {
+  lines: LayoutLine[]
+  blocks: LayoutBlock[]
   debugSlots: Array<{ x: number; y: number; width: number; height: number }>
   overflowed: boolean
   renderedLines: number
   scale: number
 }
-
-const ENGINE_STYLE_ID = 'pretext-image-engine-styles'
-
-const ENGINE_CSS = `
-.pie-root {
-  --pie-selection-bg: rgba(245, 221, 171, 0.72);
-  --pie-selection-color: #0d1117;
-  color: #11151a;
-}
-
-.pie-root,
-.pie-root * {
-  box-sizing: border-box;
-}
-
-.pie-root[data-selection-enabled="true"] .pie-line::selection,
-.pie-root[data-selection-enabled="true"] .pie-fallback *::selection {
-  background: var(--pie-selection-bg);
-  color: var(--pie-selection-color);
-}
-
-.pie-stage-shell {
-  display: grid;
-  gap: 1rem;
-}
-
-.pie-stage {
-  position: relative;
-  overflow: hidden;
-  min-height: 240px;
-  background: #0f1116;
-}
-
-.pie-base,
-.pie-overlay,
-.pie-line-layer,
-.pie-debug-layer,
-.pie-status {
-  position: absolute;
-  inset: 0;
-}
-
-.pie-base,
-.pie-overlay {
-  width: 100%;
-  height: 100%;
-  object-position: center;
-  pointer-events: none;
-}
-
-.pie-line-layer,
-.pie-debug-layer {
-  pointer-events: none;
-}
-
-.pie-root[data-selectable="true"] .pie-line-layer {
-  pointer-events: auto;
-}
-
-.pie-line {
-  position: absolute;
-  white-space: pre;
-  max-width: max-content;
-}
-
-.pie-slot {
-  position: absolute;
-  border: 1px dashed rgba(94, 237, 211, 0.85);
-  background: rgba(94, 237, 211, 0.1);
-}
-
-.pie-region {
-  position: absolute;
-  border: 1px solid rgba(245, 221, 171, 0.8);
-  background: rgba(245, 221, 171, 0.08);
-}
-
-.pie-status {
-  pointer-events: none;
-  z-index: 7;
-  display: grid;
-  align-content: end;
-  justify-items: end;
-  padding: 0.85rem;
-}
-
-.pie-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 2rem;
-  padding: 0.45rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(10, 11, 14, 0.68);
-  color: rgba(248, 241, 230, 0.96);
-  font: 700 0.72rem/1.2 "IBM Plex Mono", ui-monospace, monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  backdrop-filter: blur(14px);
-}
-
-.pie-fallback {
-  padding: 1rem;
-  border-radius: 18px;
-  background: rgba(252, 247, 240, 0.94);
-  color: #11151a;
-}
-
-.pie-fallback-label {
-  margin: 0 0 0.75rem;
-  color: #756657;
-  font: 700 0.74rem/1.2 "IBM Plex Mono", ui-monospace, monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.pie-fallback-content {
-  display: grid;
-  gap: 0.8rem;
-}
-
-.pie-fallback-block {
-  margin: 0;
-}
-
-.pie-fallback-eyebrow {
-  color: #9b5b2c;
-  font: 700 0.78rem/1.2 "IBM Plex Mono", ui-monospace, monospace;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.pie-fallback-heading {
-  font: 600 clamp(1.3rem, 2vw, 1.9rem)/1.04 "Fraunces", Georgia, serif;
-}
-
-.pie-fallback-lede {
-  font: 600 1rem/1.6 "Source Serif 4", Georgia, serif;
-  color: #3b4652;
-}
-
-.pie-fallback-body {
-  font: 400 1rem/1.7 "Source Serif 4", Georgia, serif;
-  color: #3b4652;
-}
-
-.pie-fallback-caption {
-  font: italic 400 0.95rem/1.5 "Source Serif 4", Georgia, serif;
-  color: #6e7884;
-}
-`
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
@@ -248,6 +125,8 @@ const textOr = (value: string | undefined, fallback: string): string =>
 
 const objectOrEmpty = <T extends object>(value: T | undefined): Partial<T> =>
   value && typeof value === 'object' ? value : {}
+
+const clampProgress = (value: number): number => clamp(numberOr(value, 0), 0, 1)
 
 const mergeHighlight = (base: Required<HighlightConfig>, patch?: HighlightConfig): Required<HighlightConfig> => ({
   ...base,
@@ -361,6 +240,24 @@ const getFontMetrics = (
   }
 }
 
+const resolveScrollConfig = (scroll?: TextBlockScrollConfig): ResolvedBlockScroll => {
+  const mode = scroll?.mode ?? 'static'
+  const start = clampProgress(numberOr(scroll?.start, 0))
+  const end = clampProgress(numberOr(scroll?.end, 1))
+
+  return {
+    mode,
+    start,
+    end: end <= start ? start : end,
+    stickyTop: Math.max(0, numberOr(scroll?.stickyTop, 24)),
+  }
+}
+
+const resolveOptions = (options?: EngineOptions): ResolvedOptions => ({
+  injectStyles: options?.injectStyles ?? true,
+  initialProgress: clampProgress(numberOr(options?.initialProgress, 0)),
+})
+
 const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
   const mergedColors: ResolvedColors = {
     text: { ...DEFAULT_COLORS.text, ...objectOrEmpty(scene.colors?.text) } as ResolvedColors['text'],
@@ -437,15 +334,15 @@ const srgbChannelToLinear = (value: number): number => {
 const relativeLuminance = (r: number, g: number, b: number): number =>
   0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b)
 
-const ensureEngineStyles = (): void => {
-  if (document.getElementById(ENGINE_STYLE_ID)) {
+const ensureEngineStyles = (doc: Document, injectStyles: boolean): void => {
+  if (!injectStyles || doc.getElementById(ENGINE_STYLE_ID)) {
     return
   }
 
-  const style = document.createElement('style')
+  const style = doc.createElement('style')
   style.id = ENGINE_STYLE_ID
   style.textContent = ENGINE_CSS
-  document.head.append(style)
+  doc.head.append(style)
 }
 
 const waitForImage = async (image: HTMLImageElement): Promise<void> => {
@@ -599,19 +496,113 @@ const maybeSplitSlot = (
   })
 }
 
-const buildFallbackBlock = (block: TextBlockConfig, style: ResolvedBlockStyle): HTMLElement => {
+const buildFallbackBlock = (
+  doc: Document,
+  block: TextBlockConfig,
+  style: ResolvedBlockStyle,
+): HTMLElement => {
   const tag = block.style === 'heading' ? 'h3' : 'p'
-  const element = document.createElement(tag)
+  const element = doc.createElement(tag)
   element.className = `pie-fallback-block pie-fallback-${sanitizeStyleName(block.style)}`
   element.textContent =
     style.textTransform === 'uppercase' ? block.text.toUpperCase() : block.text
   return element
 }
 
+const getBlockProgress = (progress: number, scroll: ResolvedBlockScroll): number => {
+  if (scroll.mode === 'static') {
+    return 1
+  }
+
+  if (scroll.end <= scroll.start) {
+    return progress >= scroll.start ? 1 : 0
+  }
+
+  return clamp((progress - scroll.start) / (scroll.end - scroll.start), 0, 1)
+}
+
+const isStickyBlockActive = (progress: number, block: LayoutBlock): boolean => {
+  if (block.scroll.mode !== 'sticky-start-reveal') {
+    return false
+  }
+
+  if (block.scroll.end <= block.scroll.start) {
+    return progress === block.scroll.start
+  }
+
+  return progress >= block.scroll.start && progress <= block.scroll.end
+}
+
+const isLineVisible = (line: LayoutLine, progress: number): boolean => {
+  if (line.scroll.mode === 'static') {
+    return true
+  }
+
+  if (progress < line.scroll.start) {
+    return false
+  }
+
+  return getBlockProgress(progress, line.scroll) >= line.revealThreshold
+}
+
+const createLineElement = (
+  doc: Document,
+  line: LayoutLine,
+  selectable: boolean,
+  sticky = false,
+): HTMLDivElement => {
+  const element = doc.createElement('div')
+  element.className = `pie-line${sticky ? ' pie-sticky-line' : ''} pie-line-${sanitizeStyleName(line.styleName)}`
+  element.textContent = line.text
+  element.style.left = `${Math.round(line.x)}px`
+  element.style.top = `${Math.round(sticky ? line.scroll.stickyTop : line.y)}px`
+  element.style.color = line.appearance.textColor
+  element.style.font = `${line.style.fontWeight} ${Math.round(line.fontSize)}px ${line.style.fontFamily}`
+  element.style.lineHeight = `${line.lineHeightPx}px`
+  element.style.letterSpacing = `${line.style.letterSpacing}px`
+  element.style.textTransform = line.style.textTransform
+  element.style.padding = `${line.appearance.paddingY}px ${line.appearance.paddingX}px`
+  element.style.borderRadius = `${line.appearance.radius}px`
+  element.style.background = line.appearance.backgroundColor ?? 'transparent'
+  element.style.boxShadow = line.appearance.backgroundColor
+    ? `0 0 ${line.style.minFontSize}px ${line.appearance.backgroundColor}`
+    : 'none'
+  element.style.textShadow =
+    line.appearance.shadowBlur > 0
+      ? `${line.appearance.shadowOffsetX}px ${line.appearance.shadowOffsetY}px ${line.appearance.shadowBlur}px ${line.appearance.shadowColor}`
+      : 'none'
+  element.style.userSelect = selectable && !sticky ? 'text' : 'none'
+  element.dataset.blockId = line.blockId
+  element.dataset.lineId = line.id
+  element.dataset.scrollMode = line.scroll.mode
+
+  if (sticky) {
+    element.setAttribute('aria-hidden', 'true')
+  }
+
+  return element
+}
+
+const getSafeDocument = (container: HTMLElement): Document => {
+  const doc = container.ownerDocument
+
+  if (!doc?.defaultView) {
+    throw new Error(
+      'pretext-image-engine can be imported in SSR, but createPretextImageEngine() requires a browser DOM container.',
+    )
+  }
+
+  return doc
+}
+
 export class PretextImageEngine implements ImageTextEngine {
   private readonly container: HTMLElement
+  private readonly doc: Document
+  private readonly options: ResolvedOptions
   private readonly root: HTMLDivElement
   private readonly stageShell: HTMLDivElement
+  private readonly stickyLayer: HTMLDivElement
+  private readonly stickyInner: HTMLDivElement
   private readonly stage: HTMLDivElement
   private readonly baseImage: HTMLImageElement
   private readonly overlayImage: HTMLImageElement
@@ -630,57 +621,69 @@ export class PretextImageEngine implements ImageTextEngine {
   private scene: ResolvedScene
   private imageSignature = ''
   private pendingFrame = 0
+  private activeLayout: MaskedLayoutResult | null = null
+  private readonly lineElements = new Map<string, HTMLDivElement>()
   readonly ready: Promise<void>
-  state: EngineState = {
-    layoutMode: 'masked',
-    width: 0,
-    height: 0,
-    scale: 1,
-  }
+  state: EngineState
 
-  constructor(container: HTMLElement, scene: ImageEngineSceneConfig) {
-    ensureEngineStyles()
+  constructor(container: HTMLElement, scene: ImageEngineSceneConfig, options?: EngineOptions) {
+    this.doc = getSafeDocument(container)
+    this.options = resolveOptions(options)
+    ensureEngineStyles(this.doc, this.options.injectStyles)
 
     this.container = container
     this.scene = resolveScene(scene)
-    this.root = document.createElement('div')
+    this.state = {
+      layoutMode: 'masked',
+      width: 0,
+      height: 0,
+      scale: 1,
+      progress: this.options.initialProgress,
+    }
+
+    this.root = this.doc.createElement('div')
     this.root.className = 'pie-root'
-    this.stageShell = document.createElement('div')
+    this.stageShell = this.doc.createElement('div')
     this.stageShell.className = 'pie-stage-shell'
-    this.stage = document.createElement('div')
+    this.stickyLayer = this.doc.createElement('div')
+    this.stickyLayer.className = 'pie-sticky-layer'
+    this.stickyInner = this.doc.createElement('div')
+    this.stickyInner.className = 'pie-sticky-inner'
+    this.stickyLayer.append(this.stickyInner)
+    this.stage = this.doc.createElement('div')
     this.stage.className = 'pie-stage'
-    this.baseImage = document.createElement('img')
+    this.baseImage = this.doc.createElement('img')
     this.baseImage.className = 'pie-base'
     this.baseImage.alt = ''
     this.baseImage.decoding = 'async'
-    this.overlayImage = document.createElement('img')
+    this.overlayImage = this.doc.createElement('img')
     this.overlayImage.className = 'pie-overlay'
     this.overlayImage.alt = ''
     this.overlayImage.decoding = 'async'
-    this.lineLayer = document.createElement('div')
+    this.lineLayer = this.doc.createElement('div')
     this.lineLayer.className = 'pie-line-layer'
-    this.debugLayer = document.createElement('div')
+    this.debugLayer = this.doc.createElement('div')
     this.debugLayer.className = 'pie-debug-layer'
-    this.status = document.createElement('div')
+    this.status = this.doc.createElement('div')
     this.status.className = 'pie-status'
-    this.statusBadge = document.createElement('div')
+    this.statusBadge = this.doc.createElement('div')
     this.statusBadge.className = 'pie-status-badge'
     this.status.append(this.statusBadge)
-    this.fallback = document.createElement('div')
+    this.fallback = this.doc.createElement('div')
     this.fallback.className = 'pie-fallback'
     this.fallback.hidden = true
-    this.fallbackLabel = document.createElement('p')
+    this.fallbackLabel = this.doc.createElement('p')
     this.fallbackLabel.className = 'pie-fallback-label'
-    this.fallbackContent = document.createElement('div')
+    this.fallbackContent = this.doc.createElement('div')
     this.fallbackContent.className = 'pie-fallback-content'
     this.fallback.append(this.fallbackLabel, this.fallbackContent)
     this.stage.append(this.baseImage, this.lineLayer, this.debugLayer, this.overlayImage, this.status)
-    this.stageShell.append(this.stage, this.fallback)
+    this.stageShell.append(this.stickyLayer, this.stage, this.fallback)
     this.root.append(this.stageShell)
     this.container.replaceChildren(this.root)
 
-    this.baseCanvas = document.createElement('canvas')
-    this.overlayCanvas = document.createElement('canvas')
+    this.baseCanvas = this.doc.createElement('canvas')
+    this.overlayCanvas = this.doc.createElement('canvas')
     this.baseContext = this.baseCanvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D
     this.overlayContext = this.overlayCanvas.getContext('2d', {
       willReadFrequently: true,
@@ -696,6 +699,14 @@ export class PretextImageEngine implements ImageTextEngine {
     this.scene = resolveScene(scene)
     await this.loadAssets()
     this.render()
+  }
+
+  setProgress(progress: number): void {
+    this.state.progress = clampProgress(progress)
+
+    if (this.state.layoutMode === 'masked' && this.activeLayout) {
+      this.applyProgressProjection()
+    }
   }
 
   render(): void {
@@ -733,7 +744,7 @@ export class PretextImageEngine implements ImageTextEngine {
     }
 
     const candidates = buildScaleCandidates(this.scene.layout)
-    let bestPartial: LayoutResult | null = null
+    let bestPartial: MaskedLayoutResult | null = null
 
     for (const scale of candidates) {
       const result = this.measureMaskedLayout(width, height, scale)
@@ -766,6 +777,7 @@ export class PretextImageEngine implements ImageTextEngine {
     this.applyMasked(
       {
         lines: [],
+        blocks: [],
         debugSlots: [],
         overflowed: true,
         renderedLines: 0,
@@ -989,7 +1001,12 @@ export class PretextImageEngine implements ImageTextEngine {
     return mergeStyle(base, block.styleOverride)
   }
 
-  private resolveColumns(styleName: string, style: ResolvedBlockStyle, block: TextBlockConfig, region: ResolvedRegion | null): Required<ColumnSplitConfig> {
+  private resolveColumns(
+    styleName: string,
+    style: ResolvedBlockStyle,
+    block: TextBlockConfig,
+    region: ResolvedRegion | null,
+  ): Required<ColumnSplitConfig> {
     const fromRegion = region?.columnSplit
     const fromBlock = block.columns
     const merged = mergeColumns(this.scene.columnSplit, fromRegion)
@@ -1025,24 +1042,33 @@ export class PretextImageEngine implements ImageTextEngine {
     return [chooseSingleSlot(sorted, anchorX)]
   }
 
-  private measureMaskedLayout(width: number, height: number, scale: number): LayoutResult {
-    const lines: PositionedLine[] = []
-    const debugSlots: LayoutResult['debugSlots'] = []
+  private measureMaskedLayout(width: number, height: number, scale: number): MaskedLayoutResult {
+    const lines: LayoutLine[] = []
+    const blocks: LayoutBlock[] = []
+    const debugSlots: MaskedLayoutResult['debugSlots'] = []
     let globalCursor = this.scene.layout.outerPadding
     const regionCursors = new Map<string, number>()
 
-    for (const block of this.scene.blocks) {
+    for (const [blockIndex, block] of this.scene.blocks.entries()) {
+      const blockId = block.id ?? `block-${blockIndex}`
       const style = this.resolveBlockStyle(block)
       const text =
         style.textTransform === 'uppercase' ? block.text.toUpperCase() : block.text
-      const { font, lineHeightPx } = getFontMetrics(style, width, scale)
+      const { font, fontSize, lineHeightPx } = getFontMetrics(style, width, scale)
       const prepared = prepareWithSegments(text, font)
       const region = block.region ? this.scene.regions[block.region] ?? null : null
-      const regionTop = region ? Math.max(this.scene.layout.outerPadding, Math.round(region.yStart * height)) : this.scene.layout.outerPadding
-      const regionBottom = region ? Math.min(height - this.scene.layout.outerPadding, Math.round(region.yEnd * height)) : height - this.scene.layout.outerPadding
+      const scroll = resolveScrollConfig(block.scroll)
+      const blockLineStart = lines.length
+      const regionTop = region
+        ? Math.max(this.scene.layout.outerPadding, Math.round(region.yStart * height))
+        : this.scene.layout.outerPadding
+      const regionBottom = region
+        ? Math.min(height - this.scene.layout.outerPadding, Math.round(region.yEnd * height))
+        : height - this.scene.layout.outerPadding
       let cursorTop = region ? regionCursors.get(block.region!) ?? regionTop : globalCursor
       let cursor = { segmentIndex: 0, graphemeIndex: 0 }
       let blockFinished = false
+      let blockLineIndex = 0
 
       while (cursorTop + lineHeightPx <= regionBottom) {
         const bandTop = cursorTop
@@ -1084,14 +1110,23 @@ export class PretextImageEngine implements ImageTextEngine {
           )
 
           lines.push({
+            id: `${blockId}-line-${blockLineIndex}`,
+            blockId,
+            blockIndex,
+            lineIndex: blockLineIndex,
             text: line.text,
             x: slot.left,
             y: bandTop,
             width: line.width,
             styleName: block.style,
             style,
+            fontSize,
+            lineHeightPx,
             appearance,
+            scroll,
+            revealThreshold: 0,
           })
+          blockLineIndex += 1
           cursor = line.end
           placed = true
         }
@@ -1111,9 +1146,24 @@ export class PretextImageEngine implements ImageTextEngine {
         }
       }
 
+      const blockLineCount = lines.length - blockLineStart
+
+      for (let index = 0; index < blockLineCount; index += 1) {
+        const line = lines[blockLineStart + index]!
+        line.revealThreshold = scroll.mode === 'static' || blockLineCount <= 1 ? 0 : index / blockLineCount
+      }
+
+      blocks.push({
+        id: blockId,
+        blockIndex,
+        scroll,
+        firstLineId: blockLineCount > 0 ? lines[blockLineStart]!.id : null,
+      })
+
       if (!blockFinished) {
         return {
           lines,
+          blocks,
           debugSlots,
           overflowed: true,
           renderedLines: lines.length,
@@ -1124,6 +1174,7 @@ export class PretextImageEngine implements ImageTextEngine {
 
     return {
       lines,
+      blocks,
       debugSlots,
       overflowed: false,
       renderedLines: lines.length,
@@ -1131,49 +1182,32 @@ export class PretextImageEngine implements ImageTextEngine {
     }
   }
 
-  private applyMasked(result: LayoutResult, statusText = 'Masked layout active'): void {
+  private applyMasked(result: MaskedLayoutResult, statusText = 'Masked layout active'): void {
     this.state.layoutMode = 'masked'
     this.state.scale = result.scale
+    this.activeLayout = result
     this.root.dataset.mode = 'masked'
+    this.lineElements.clear()
     this.lineLayer.replaceChildren()
     this.debugLayer.replaceChildren()
+    this.stickyInner.replaceChildren()
 
-    const lineFragment = document.createDocumentFragment()
+    const lineFragment = this.doc.createDocumentFragment()
 
     result.lines.forEach((line) => {
-      const { fontSize, lineHeightPx } = getFontMetrics(line.style, this.state.width, result.scale)
-      const element = document.createElement('div')
-      element.className = `pie-line pie-line-${sanitizeStyleName(line.styleName)}`
-      element.textContent = line.text
-      element.style.left = `${Math.round(line.x)}px`
-      element.style.top = `${Math.round(line.y)}px`
-      element.style.color = line.appearance.textColor
-      element.style.font = `${line.style.fontWeight} ${Math.round(fontSize)}px ${line.style.fontFamily}`
-      element.style.lineHeight = `${lineHeightPx}px`
-      element.style.letterSpacing = `${line.style.letterSpacing}px`
-      element.style.textTransform = line.style.textTransform
-      element.style.padding = `${line.appearance.paddingY}px ${line.appearance.paddingX}px`
-      element.style.borderRadius = `${line.appearance.radius}px`
-      element.style.background = line.appearance.backgroundColor ?? 'transparent'
-      element.style.boxShadow = line.appearance.backgroundColor
-        ? `0 0 ${line.style.minFontSize}px ${line.appearance.backgroundColor}`
-        : 'none'
-      element.style.textShadow =
-        line.appearance.shadowBlur > 0
-          ? `${line.appearance.shadowOffsetX}px ${line.appearance.shadowOffsetY}px ${line.appearance.shadowBlur}px ${line.appearance.shadowColor}`
-          : 'none'
-      element.style.userSelect = this.scene.interaction.selectable ? 'text' : 'none'
+      const element = createLineElement(this.doc, line, this.scene.interaction.selectable)
+      this.lineElements.set(line.id, element)
       lineFragment.append(element)
     })
 
     this.lineLayer.append(lineFragment)
 
     if (this.scene.debug.enabled && (this.scene.debug.showSlots || this.scene.debug.showRegions)) {
-      const debugFragment = document.createDocumentFragment()
+      const debugFragment = this.doc.createDocumentFragment()
 
       if (this.scene.debug.showSlots) {
         result.debugSlots.forEach((slot) => {
-          const element = document.createElement('div')
+          const element = this.doc.createElement('div')
           element.className = 'pie-slot'
           element.style.left = `${slot.x}px`
           element.style.top = `${slot.y}px`
@@ -1185,7 +1219,7 @@ export class PretextImageEngine implements ImageTextEngine {
 
       if (this.scene.debug.showRegions) {
         Object.values(this.scene.regions).forEach((region) => {
-          const element = document.createElement('div')
+          const element = this.doc.createElement('div')
           element.className = 'pie-region'
           element.style.left = `${Math.round(region.xStart * this.state.width)}px`
           element.style.top = `${Math.round(region.yStart * this.state.height)}px`
@@ -1200,20 +1234,59 @@ export class PretextImageEngine implements ImageTextEngine {
 
     this.fallback.hidden = true
     this.statusBadge.textContent = statusText
+    this.applyProgressProjection()
+  }
+
+  private applyProgressProjection(): void {
+    if (!this.activeLayout) {
+      this.stickyInner.replaceChildren()
+      return
+    }
+
+    let stickyLine: LayoutLine | null = null
+
+    for (const block of this.activeLayout.blocks) {
+      if (!isStickyBlockActive(this.state.progress, block) || !block.firstLineId) {
+        continue
+      }
+
+      stickyLine = this.activeLayout.lines.find((line) => line.id === block.firstLineId) ?? null
+    }
+
+    this.activeLayout.lines.forEach((line) => {
+      const element = this.lineElements.get(line.id)
+
+      if (!element) {
+        return
+      }
+
+      const visible = isLineVisible(line, this.state.progress) && line.id !== stickyLine?.id
+      element.hidden = !visible
+    })
+
+    this.stickyInner.replaceChildren()
+
+    if (stickyLine) {
+      const stickyElement = createLineElement(this.doc, stickyLine, false, true)
+      this.stickyInner.append(stickyElement)
+    }
   }
 
   private applyFallback(label: string): void {
     this.state.layoutMode = 'fallback'
     this.state.scale = 1
+    this.activeLayout = null
+    this.lineElements.clear()
     this.root.dataset.mode = 'fallback'
     this.lineLayer.replaceChildren()
     this.debugLayer.replaceChildren()
+    this.stickyInner.replaceChildren()
     this.fallbackContent.replaceChildren()
 
-    const fragment = document.createDocumentFragment()
+    const fragment = this.doc.createDocumentFragment()
 
     this.scene.blocks.forEach((block) => {
-      fragment.append(buildFallbackBlock(block, this.resolveBlockStyle(block)))
+      fragment.append(buildFallbackBlock(this.doc, block, this.resolveBlockStyle(block)))
     })
 
     this.fallbackContent.append(fragment)
@@ -1226,4 +1299,5 @@ export class PretextImageEngine implements ImageTextEngine {
 export const createPretextImageEngine = (
   container: HTMLElement,
   scene: ImageEngineSceneConfig,
-): ImageTextEngine => new PretextImageEngine(container, scene)
+  options?: EngineOptions,
+): ImageTextEngine => new PretextImageEngine(container, scene, options)

@@ -5,6 +5,7 @@ export type ColumnSplitMode = 'off' | 'auto' | 'fixed'
 export type TextColorMode = 'fixed' | 'auto'
 export type HighlightMode = 'off' | 'pill' | 'block' | 'auto'
 export type FallbackMode = 'below' | 'none'
+export type TextBlockScrollMode = 'static' | 'reveal' | 'sticky-start-reveal'
 
 export interface SceneMeta {
   id?: string
@@ -101,6 +102,13 @@ export interface InteractionConfig {
   selectable?: boolean
 }
 
+export interface TextBlockScrollConfig {
+  mode?: TextBlockScrollMode
+  start?: number
+  end?: number
+  stickyTop?: number
+}
+
 export interface RegionConfig {
   xStart?: number
   xEnd?: number
@@ -137,6 +145,7 @@ export interface TextBlockConfig {
   styleOverride?: BlockStyleConfig
   highlight?: HighlightConfig
   columns?: ColumnSplitConfig
+  scroll?: TextBlockScrollConfig
 }
 
 export interface DebugConfig {
@@ -178,6 +187,12 @@ export interface EngineState {
   width: number
   height: number
   scale: number
+  progress: number
+}
+
+export interface EngineOptions {
+  injectStyles?: boolean
+  initialProgress?: number
 }
 
 export interface ImageTextEngine {
@@ -185,5 +200,6 @@ export interface ImageTextEngine {
   readonly state: EngineState
   update(scene: ImageEngineSceneConfig): Promise<void>
   render(): void
+  setProgress(progress: number): void
   destroy(): void
 }

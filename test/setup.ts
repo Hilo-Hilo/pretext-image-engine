@@ -147,6 +147,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = ''
+  document.getElementById('pretext-image-engine-styles')?.remove()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })

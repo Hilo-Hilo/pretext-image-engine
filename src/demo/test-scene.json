@@ -1,0 +1,161 @@
+{
+  "meta": {
+    "id": "local-test-scene",
+    "name": "Local Test Scene",
+    "description": "A high-resolution local test scene that uses ignored assets from public/scenes/local-test.",
+    "alt": "A warm aerial view of the Bay Bridge leading into a hazy San Francisco skyline.",
+    "author": "Hanson Wen",
+    "tags": ["local-assets", "scroll-demo", "test-site"]
+  },
+  "assets": {
+    "baseSrc": "/scenes/local-test/base.png",
+    "overlaySrc": "/scenes/local-test/overlay.png",
+    "alphaThreshold": 20,
+    "fit": "cover"
+  },
+  "stage": {
+    "minHeight": 520,
+    "background": "#080a0d",
+    "padding": 14,
+    "borderRadius": 32
+  },
+  "layout": {
+    "outerPadding": 18,
+    "horizontalPadding": 8,
+    "verticalPadding": 3,
+    "minSlotWidth": 56,
+    "minScale": 0.68,
+    "scaleStep": 0.08,
+    "fallbackBelowWidth": 860
+  },
+  "resize": {
+    "preserveFullText": true,
+    "fallbackMode": "below",
+    "fallbackLabel": "Full text moved below the image at this width."
+  },
+  "interaction": {
+    "selectable": false
+  },
+  "colors": {
+    "text": {
+      "mode": "auto",
+      "color": "#f4ede2",
+      "lightColor": "#f6efe4",
+      "darkColor": "#11161a",
+      "luminanceThreshold": 0.61
+    },
+    "highlight": {
+      "enabled": true,
+      "mode": "auto",
+      "color": "rgba(11, 12, 15, 0.58)",
+      "lightColor": "rgba(248, 241, 230, 0.92)",
+      "darkColor": "rgba(9, 11, 14, 0.68)",
+      "opacity": 0.92,
+      "paddingX": 8,
+      "paddingY": 4,
+      "radius": 12,
+      "blur": 22
+    },
+    "shadow": {
+      "enabled": true,
+      "color": "rgba(8, 10, 14, 0.4)",
+      "blur": 18,
+      "offsetX": 0,
+      "offsetY": 6
+    },
+    "selection": {
+      "enabled": true,
+      "color": "#0d1117",
+      "background": "rgba(247, 222, 183, 0.76)"
+    }
+  },
+  "columnSplit": {
+    "mode": "auto",
+    "preferredColumns": 2,
+    "maxColumns": 2,
+    "minColumnWidth": 180,
+    "gap": 22,
+    "applyToStyles": ["body"]
+  },
+  "regions": {
+    "topRight": {
+      "xStart": 0.56,
+      "xEnd": 0.985,
+      "yStart": 0.02,
+      "yEnd": 0.47,
+      "anchorX": 0.77,
+      "slotOrder": "center-out",
+      "minSlotWidth": 70
+    },
+    "lowerLeft": {
+      "xStart": 0.02,
+      "xEnd": 0.66,
+      "yStart": 0.49,
+      "yEnd": 0.985,
+      "anchorX": 0.24,
+      "slotOrder": "left-to-right",
+      "minSlotWidth": 58,
+      "columnSplit": {
+        "mode": "auto",
+        "preferredColumns": 2,
+        "maxColumns": 2,
+        "minColumnWidth": 170,
+        "gap": 20,
+        "applyToStyles": ["body"]
+      }
+    }
+  },
+  "styles": {
+    "eyebrow": {
+      "highlight": {
+        "enabled": false,
+        "mode": "off"
+      }
+    },
+    "heading": {
+      "highlight": {
+        "enabled": true,
+        "mode": "pill",
+        "paddingX": 12,
+        "paddingY": 7,
+        "radius": 16
+      }
+    }
+  },
+  "blocks": [
+    {
+      "id": "eyebrow",
+      "style": "eyebrow",
+      "region": "topRight",
+      "text": "LOCAL TEST SCENE",
+      "scroll": {
+        "mode": "reveal",
+        "start": 0,
+        "end": 0.2
+      }
+    },
+    {
+      "id": "headline",
+      "style": "heading",
+      "region": "topRight",
+      "text": "Bay Bridge through a warm fog wall.",
+      "scroll": {
+        "mode": "sticky-start-reveal",
+        "start": 0.12,
+        "end": 0.56,
+        "stickyTop": 22
+      }
+    },
+    {
+      "id": "body",
+      "style": "body",
+      "region": "lowerLeft",
+      "text": "This local-only test scene uses a high-resolution mask with two transparent windows, letting you verify scroll progression, sticky line anchoring, and fallback behavior against real photographic detail without checking the source images into git.",
+      "scroll": {
+        "mode": "reveal",
+        "start": 0.42,
+        "end": 1
+      }
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 
 Image-aware text layout for editorial compositions, built on [`@chenglou/pretext`](https://github.com/chenglou/pretext).
 
-The engine takes a base image, a same-canvas overlay mask, and structured scene data, then lays text into transparent openings so the subject stays visually in front. If the opening becomes too tight and full-copy preservation is enabled, it can move the text below the image instead of clipping it away.
+The engine takes a base image, a same-canvas overlay mask, and structured scene data, then lays text into transparent openings so the subject stays visually in front. It now also supports host-controlled scroll progression, so frontend apps can reveal text over time or keep a leading line sticky while the image moves through the page.
 
 <p align="center">
   <img
@@ -20,6 +20,7 @@ The engine takes a base image, a same-canvas overlay mask, and structured scene 
 
 - npm package: https://www.npmjs.com/package/pretext-image-engine
 - GitHub repo: https://github.com/Hilo-Hilo/pretext-image-engine
+- Engine stylesheet: `pretext-image-engine/styles.css`
 - Scene schema: https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/schemas/scene.schema.json
 - Sample scene: https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/src/demo/sample-scene.json
 
@@ -29,10 +30,17 @@ The engine takes a base image, a same-canvas overlay mask, and structured scene 
 npm install pretext-image-engine
 ```
 
-## Quick Start
+## Recommended Usage
+
+Import the packaged stylesheet explicitly in your app and disable runtime style injection. This is the cleanest convention for most frontend projects.
 
 ```ts
-import { createPretextImageEngine, type ImageEngineSceneConfig } from 'pretext-image-engine'
+import 'pretext-image-engine/styles.css'
+
+import {
+  createPretextImageEngine,
+  type ImageEngineSceneConfig,
+} from 'pretext-image-engine'
 
 const scene: ImageEngineSceneConfig = {
   meta: {
@@ -59,9 +67,113 @@ if (!mount) {
   throw new Error('Missing mount node')
 }
 
-const engine = createPretextImageEngine(mount, scene)
+const engine = createPretextImageEngine(mount, scene, {
+  injectStyles: false,
+  initialProgress: 1,
+})
+
 await engine.ready
 ```
+
+If you want zero-config adoption, omit the third argument and the engine will inject its own stylesheet into `document.head` once.
+
+## Scroll Progression
+
+The core library does **not** register scroll listeners. Instead, your host app computes normalized progress and passes it in with `setProgress()`.
+
+```ts
+const engine = createPretextImageEngine(mount, scene, {
+  injectStyles: false,
+  initialProgress: 0,
+})
+
+await engine.ready
+
+const syncProgress = (): void => {
+  const rect = mount.getBoundingClientRect()
+  const total = rect.height + window.innerHeight
+  const progress = Math.min(1, Math.max(0, (window.innerHeight - rect.top) / total))
+
+  engine.setProgress(progress)
+}
+
+window.addEventListener('scroll', syncProgress, { passive: true })
+window.addEventListener('resize', syncProgress)
+syncProgress()
+```
+
+This keeps the engine framework-agnostic and easy to integrate in React, Vue, Svelte, Astro, and plain DOM apps.
+
+## Scroll Block Modes
+
+Each text block can opt into scroll behavior with `scroll`:
+
+- `static`: current behavior, always visible
+- `reveal`: lines reveal progressively across `start..end`
+- `sticky-start-reveal`: progressive reveal plus a sticky copy of the first rendered line
+
+Example:
+
+```json
+{
+  "blocks": [
+    {
+      "id": "headline",
+      "style": "heading",
+      "text": "Bridge into haze.",
+      "scroll": {
+        "mode": "sticky-start-reveal",
+        "start": 0.1,
+        "end": 0.55,
+        "stickyTop": 24
+      }
+    },
+    {
+      "id": "body",
+      "style": "body",
+      "text": "Longer copy continues after the headline.",
+      "scroll": {
+        "mode": "reveal",
+        "start": 0.45,
+        "end": 1
+      }
+    }
+  ]
+}
+```
+
+## Public API
+
+Core exports:
+
+- `createPretextImageEngine(container, scene, options?)`
+- `PretextImageEngine`
+- `ImageTextEngine`
+- `EngineOptions`
+- `TextBlockScrollConfig`
+- scene and style TypeScript types
+
+Runtime methods:
+
+- `await engine.ready`
+- `engine.render()`
+- `engine.update(scene)`
+- `engine.setProgress(progress)`
+- `engine.destroy()`
+
+## Engine Options
+
+```ts
+type EngineOptions = {
+  injectStyles?: boolean
+  initialProgress?: number
+}
+```
+
+Defaults:
+
+- `injectStyles: true`
+- `initialProgress: 0`
 
 ## What It Solves
 
@@ -69,6 +181,7 @@ await engine.ready
 - Uses `pretext` line fitting instead of naive DOM wrapping.
 - Supports art-directed layouts with named placement regions.
 - Preserves legibility with luminance-aware text color and optional highlight fills.
+- Supports host-controlled reveal timing without coupling the library to any one scroll system.
 - Falls back below the image when preserving the full copy matters more than staying in-frame.
 
 ## Feature Highlights
@@ -80,16 +193,9 @@ await engine.ready
 - Highlight pills or blocks for legibility
 - Optional column splitting in long empty regions
 - Resize-aware fallback behavior
-- Debug overlays for slots and regions
+- Host-controlled line reveal progression
+- Sticky leading-line support for scroll storytelling
 - Typed public API and JSON schema
-
-## How It Works
-
-1. The overlay image is sampled row by row to find transparent horizontal slots.
-2. Each text block is assigned to either the global layout flow or a named region.
-3. `@chenglou/pretext` fits the next line inside each available slot.
-4. The base image is sampled under each line to decide light or dark text when auto contrast is enabled.
-5. If the scene cannot fit within the configured constraints, the engine either scales down or falls back below the image.
 
 ## Scene Model
 
@@ -108,7 +214,7 @@ Main sections:
 - `debug`: slot and region overlays
 - `regions`: named layout zones for multi-opening masks
 - `styles`: reusable typography presets for `eyebrow`, `heading`, `lede`, `body`, `caption`, or custom styles
-- `blocks`: the text content and per-block overrides
+- `blocks`: the text content and per-block overrides, including optional `scroll`
 
 ### Multi-Opening Overlays
 
@@ -149,12 +255,30 @@ When `resize.preserveFullText` is `true`, the engine tries this sequence:
 
 When `resize.preserveFullText` is `false`, the engine keeps the text inside the image and allows clipping instead of falling back.
 
+## SSR and Browser Constraints
+
+- The package is safe to import in SSR and build environments.
+- `createPretextImageEngine()` requires a real browser DOM container at runtime.
+- The library does not attach scroll listeners by itself; your host environment owns scroll state.
+
+## Frontend Integration Guidance
+
+- **React/Vue/Svelte**: create the engine after mount, keep progress in component state or a scroll utility, and call `setProgress()` from effects or event handlers.
+- **Vanilla DOM**: import the stylesheet once, instantiate on a container, and wire scroll/resize listeners in the host page.
+- **Agents and tooling**: prefer explicit CSS import plus `injectStyles: false`, since that makes bundling and head management predictable.
+
 ## Local Development
 
 ```bash
 npm install
 npm run dev
 ```
+
+Optional local-only test scene:
+
+1. Copy your large test images into `public/scenes/local-test/base.png` and `public/scenes/local-test/overlay.png`
+2. Keep them untracked; the repo ignores those `.png` files on purpose
+3. Start the dev server and the test site will default to the local scene automatically when those files exist
 
 Useful commands:
 
@@ -165,18 +289,11 @@ npm run build
 npm run preview
 ```
 
-## Package Surface
-
-Exports:
-
-- `createPretextImageEngine()`
-- `PretextImageEngine`
-- TypeScript types for the scene config
-
 ## Caveats
 
 - The base image and overlay need to share the same composition and alignment.
 - Automatic placement can infer geometry, but not art direction. Use named regions when layout intent matters.
+- Scroll progression is normalized `0..1`; your host app is responsible for mapping viewport state into that range.
 - Very small openings still require shorter copy, lower scale limits, or fallback behavior.
 
 ## License

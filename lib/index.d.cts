@@ -5,6 +5,7 @@ type ColumnSplitMode = 'off' | 'auto' | 'fixed';
 type TextColorMode = 'fixed' | 'auto';
 type HighlightMode = 'off' | 'pill' | 'block' | 'auto';
 type FallbackMode = 'below' | 'none';
+type TextBlockScrollMode = 'static' | 'reveal' | 'sticky-start-reveal';
 interface SceneMeta {
     id?: string;
     name: string;
@@ -88,6 +89,12 @@ interface ColumnSplitConfig {
 interface InteractionConfig {
     selectable?: boolean;
 }
+interface TextBlockScrollConfig {
+    mode?: TextBlockScrollMode;
+    start?: number;
+    end?: number;
+    stickyTop?: number;
+}
 interface RegionConfig {
     xStart?: number;
     xEnd?: number;
@@ -122,6 +129,7 @@ interface TextBlockConfig {
     styleOverride?: BlockStyleConfig;
     highlight?: HighlightConfig;
     columns?: ColumnSplitConfig;
+    scroll?: TextBlockScrollConfig;
 }
 interface DebugConfig {
     enabled?: boolean;
@@ -148,19 +156,29 @@ interface EngineState {
     width: number;
     height: number;
     scale: number;
+    progress: number;
+}
+interface EngineOptions {
+    injectStyles?: boolean;
+    initialProgress?: number;
 }
 interface ImageTextEngine {
     readonly ready: Promise<void>;
     readonly state: EngineState;
     update(scene: ImageEngineSceneConfig): Promise<void>;
     render(): void;
+    setProgress(progress: number): void;
     destroy(): void;
 }
 
 declare class PretextImageEngine implements ImageTextEngine {
     private readonly container;
+    private readonly doc;
+    private readonly options;
     private readonly root;
     private readonly stageShell;
+    private readonly stickyLayer;
+    private readonly stickyInner;
     private readonly stage;
     private readonly baseImage;
     private readonly overlayImage;
@@ -179,10 +197,13 @@ declare class PretextImageEngine implements ImageTextEngine {
     private scene;
     private imageSignature;
     private pendingFrame;
+    private activeLayout;
+    private readonly lineElements;
     readonly ready: Promise<void>;
     state: EngineState;
-    constructor(container: HTMLElement, scene: ImageEngineSceneConfig);
+    constructor(container: HTMLElement, scene: ImageEngineSceneConfig, options?: EngineOptions);
     update(scene: ImageEngineSceneConfig): Promise<void>;
+    setProgress(progress: number): void;
     render(): void;
     destroy(): void;
     private attachResizeObserver;
@@ -197,8 +218,9 @@ declare class PretextImageEngine implements ImageTextEngine {
     private orderSlots;
     private measureMaskedLayout;
     private applyMasked;
+    private applyProgressProjection;
     private applyFallback;
 }
-declare const createPretextImageEngine: (container: HTMLElement, scene: ImageEngineSceneConfig) => ImageTextEngine;
+declare const createPretextImageEngine: (container: HTMLElement, scene: ImageEngineSceneConfig, options?: EngineOptions) => ImageTextEngine;
 
-export { type BlockStyleConfig, type CSSColorValue, type ColorConfig, type ColumnSplitConfig, type DebugConfig, type EngineState, type HighlightConfig, type ImageEngineSceneConfig, type ImageTextEngine, type InteractionConfig, type LayoutConfig, PretextImageEngine, type RegionConfig, type ResizeConfig, type SceneAssetConfig, type SceneMeta, type StageConfig, type TextBlockConfig, type TextColorConfig, type TextStyleName, createPretextImageEngine };
+export { type BlockStyleConfig, type CSSColorValue, type ColorConfig, type ColumnSplitConfig, type DebugConfig, type EngineOptions, type EngineState, type HighlightConfig, type ImageEngineSceneConfig, type ImageTextEngine, type InteractionConfig, type LayoutConfig, PretextImageEngine, type RegionConfig, type ResizeConfig, type SceneAssetConfig, type SceneMeta, type StageConfig, type TextBlockConfig, type TextBlockScrollConfig, type TextBlockScrollMode, type TextColorConfig, type TextStyleName, createPretextImageEngine };

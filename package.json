@@ -23,14 +23,18 @@
   "main": "./lib/index.cjs",
   "module": "./lib/index.js",
   "types": "./lib/index.d.ts",
+  "style": "./lib/styles.css",
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
       "import": "./lib/index.js",
       "require": "./lib/index.cjs"
-    }
+    },
+    "./styles.css": "./lib/styles.css"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./lib/styles.css"
+  ],
   "files": [
     "lib",
     "schemas",
@@ -42,7 +46,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:lib": "tsup src/lib/index.ts --format esm,cjs --dts --clean --out-dir lib",
+    "build:lib": "tsup src/lib/index.ts --format esm,cjs --dts --clean --out-dir lib && node scripts/copy-lib-assets.mjs",
     "build:demo": "vite build",
     "build": "npm run typecheck && npm run test && npm run build:lib && npm run build:demo",
     "preview": "vite preview",
