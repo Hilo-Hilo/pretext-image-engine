@@ -1,35 +1,27 @@
 # pretext-image-engine
 
-A standalone, image-aware text layout engine built on [`@chenglou/pretext`](https://github.com/chenglou/pretext).
+[![npm version](https://img.shields.io/npm/v/pretext-image-engine)](https://www.npmjs.com/package/pretext-image-engine)
+[![CI](https://github.com/Hilo-Hilo/pretext-image-engine/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Hilo-Hilo/pretext-image-engine/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/pretext-image-engine)](https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/LICENSE)
 
-The engine takes:
+Image-aware text layout for editorial compositions, built on [`@chenglou/pretext`](https://github.com/chenglou/pretext).
 
-- a full base image
-- a same-canvas overlay image whose opaque pixels should stay in front
-- structured scene JSON for text, regions, colors, highlight, fallback, and debug behavior
+The engine takes a base image, a same-canvas overlay mask, and structured scene data, then lays text into transparent openings so the subject stays visually in front. If the opening becomes too tight and full-copy preservation is enabled, it can move the text below the image instead of clipping it away.
 
-It then tries to place text inside the transparent openings without covering the subject. If the opening gets too tight and `preserveFullText` is enabled, it falls back below the image so nothing disappears.
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/Hilo-Hilo/pretext-image-engine/main/src/assets/hero.png"
+    alt="Pretext Image Engine preview"
+    width="320"
+  />
+</p>
 
-## Why This Exists
+## Links
 
-This repo is intentionally isolated from any website implementation. It focuses on one thing:
-
-> image input plus overlay-mask parsing plus `pretext` text layout
-
-The goal is a reusable engine for editorial-image compositions, not a site-specific component.
-
-## Features
-
-- Base-image plus overlay-mask composition
-- Row-by-row transparent-slot parsing from the overlay alpha
-- `pretext`-powered manual line layout
-- Region-aware layout for multi-opening overlays
-- Automatic dark/light text selection from sampled image luminance
-- Optional highlight pills or blocks for better legibility
-- Long-opening column splitting
-- Resize-aware fallback when full text should be preserved
-- Debug overlays for slots and regions
-- Package-friendly API plus demo app
+- npm package: https://www.npmjs.com/package/pretext-image-engine
+- GitHub repo: https://github.com/Hilo-Hilo/pretext-image-engine
+- Scene schema: https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/schemas/scene.schema.json
+- Sample scene: https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/src/demo/sample-scene.json
 
 ## Install
 
@@ -37,24 +29,7 @@ The goal is a reusable engine for editorial-image compositions, not a site-speci
 npm install pretext-image-engine
 ```
 
-## Local Development
-
-```bash
-npm install
-npm run dev
-```
-
-Other commands:
-
-```bash
-npm run typecheck
-npm run build:lib
-npm run build:demo
-npm run build
-npm run preview
-```
-
-## Basic Usage
+## Quick Start
 
 ```ts
 import { createPretextImageEngine, type ImageEngineSceneConfig } from 'pretext-image-engine'
@@ -62,16 +37,20 @@ import { createPretextImageEngine, type ImageEngineSceneConfig } from 'pretext-i
 const scene: ImageEngineSceneConfig = {
   meta: {
     name: 'Demo scene',
-    alt: 'A photo with an editorial opening.'
+    alt: 'A photo with text placed around the subject.',
   },
   assets: {
     baseSrc: '/scenes/demo/base.png',
-    overlaySrc: '/scenes/demo/overlay.png'
+    overlaySrc: '/scenes/demo/overlay.png',
+    fit: 'cover',
   },
   blocks: [
     { style: 'heading', text: 'Editorial image layout.' },
-    { style: 'body', text: 'The overlay keeps the subject in front while the text flows into the transparent region.' }
-  ]
+    {
+      style: 'body',
+      text: 'The overlay keeps the subject on top while the copy flows into the transparent opening.',
+    },
+  ],
 }
 
 const mount = document.getElementById('engine')
@@ -84,35 +63,56 @@ const engine = createPretextImageEngine(mount, scene)
 await engine.ready
 ```
 
-## Scene Config
+## What It Solves
 
-The demo uses `src/demo/sample-scene.json` as a full reference scene.
+- Keeps text out of protected parts of an image by reading overlay alpha.
+- Uses `pretext` line fitting instead of naive DOM wrapping.
+- Supports art-directed layouts with named placement regions.
+- Preserves legibility with luminance-aware text color and optional highlight fills.
+- Falls back below the image when preserving the full copy matters more than staying in-frame.
 
-There is also a schema file at `schemas/scene.schema.json`.
+## Feature Highlights
+
+- Base image plus overlay mask composition
+- Row-by-row transparent slot detection
+- Region-aware layout for multi-opening masks
+- Automatic dark/light text selection from the sampled image
+- Highlight pills or blocks for legibility
+- Optional column splitting in long empty regions
+- Resize-aware fallback behavior
+- Debug overlays for slots and regions
+- Typed public API and JSON schema
+
+## How It Works
+
+1. The overlay image is sampled row by row to find transparent horizontal slots.
+2. Each text block is assigned to either the global layout flow or a named region.
+3. `@chenglou/pretext` fits the next line inside each available slot.
+4. The base image is sampled under each line to decide light or dark text when auto contrast is enabled.
+5. If the scene cannot fit within the configured constraints, the engine either scales down or falls back below the image.
+
+## Scene Model
+
+The demo uses `src/demo/sample-scene.json` as a full reference. The JSON schema lives in `schemas/scene.schema.json`.
 
 Main sections:
 
 - `meta`: scene identity and accessibility text
-- `assets`: base image, overlay image, alpha threshold, fit mode
-- `stage`: aspect ratio, minimum height, background, frame styling
-- `layout`: padding, min slot width, font downscaling, fallback trigger width
-- `resize`: whether to preserve full text and what fallback mode to use
-- `colors`: fixed or automatic text color, highlight behavior, shadows, selection colors
-- `columnSplit`: how long transparent strips can become multiple columns
-- `interaction`: whether text is selectable
-- `debug`: slot and region visualization
-- `regions`: named placement zones for multi-opening masks
+- `assets`: base image, overlay image, alpha threshold, and fit mode
+- `stage`: aspect ratio, minimum height, background, and frame styling
+- `layout`: padding, min slot width, font downscaling, and fallback trigger width
+- `resize`: full-text preservation and fallback behavior
+- `colors`: fixed or automatic text color, highlight behavior, shadows, and selection colors
+- `columnSplit`: multi-column behavior for long transparent strips
+- `interaction`: text selection behavior
+- `debug`: slot and region overlays
+- `regions`: named layout zones for multi-opening masks
 - `styles`: reusable typography presets for `eyebrow`, `heading`, `lede`, `body`, `caption`, or custom styles
-- `blocks`: the actual text content and per-block overrides
+- `blocks`: the text content and per-block overrides
 
 ### Multi-Opening Overlays
 
-If your overlay has several transparent openings, there are two modes:
-
-- Automatic mode: blocks are laid out wherever the transparent slots fit best.
-- Region-aware mode: define named `regions` and assign blocks to them.
-
-Example:
+If your mask has several transparent openings, define named regions and assign blocks to them:
 
 ```json
 {
@@ -139,55 +139,31 @@ Example:
 }
 ```
 
-## Contrast and Highlight
+## Resize Strategy
 
-The engine can sample the image under each line and switch automatically between light and dark text.
+When `resize.preserveFullText` is `true`, the engine tries this sequence:
 
-Highlights can be:
+1. Masked in-image layout
+2. Smaller scale values down to `layout.minScale`
+3. Fallback below the image if the scene still cannot fit
 
-- disabled
-- fixed-color pills or blocks
-- automatic pills/blocks that flip tone depending on the sampled background
+When `resize.preserveFullText` is `false`, the engine keeps the text inside the image and allows clipping instead of falling back.
 
-That means you can keep text readable on haze, water, shadow, or mixed backgrounds without hard-coding one color for the whole image.
+## Local Development
 
-## Long Empty Regions
-
-If an opening becomes a long strip, `columnSplit` can break it into multiple sub-slots on the same band.
-
-Key fields:
-
-- `mode`: `off`, `auto`, or `fixed`
-- `preferredColumns`
-- `maxColumns`
-- `minColumnWidth`
-- `gap`
-- `applyToStyles`
-
-## Resize Behavior
-
-If `resize.preserveFullText` is `true`, the engine tries:
-
-1. masked in-image layout
-2. smaller font scales down to `layout.minScale`
-3. fallback below the image if the scene still does not fit
-
-If `resize.preserveFullText` is `false`, the engine keeps the text in the image and allows clipping instead of falling back.
-
-## Demo Assets
-
-The demo ships with a sample scene under:
-
-```text
-public/scenes/san-francisco/
+```bash
+npm install
+npm run dev
 ```
 
-The preview app lets you:
+Useful commands:
 
-- resize the stage
-- toggle debug overlays
-- toggle text selection
-- edit the scene JSON directly
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run preview
+```
 
 ## Package Surface
 
@@ -199,9 +175,9 @@ Exports:
 
 ## Caveats
 
-- The engine assumes the base image and overlay share the same composition and alignment.
-- Automatic placement can only infer geometry. For art-directed multi-region layouts, define named regions.
-- Very small openings still need either shorter copy or fallback behavior.
+- The base image and overlay need to share the same composition and alignment.
+- Automatic placement can infer geometry, but not art direction. Use named regions when layout intent matters.
+- Very small openings still require shorter copy, lower scale limits, or fallback behavior.
 
 ## License
 

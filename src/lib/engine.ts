@@ -101,8 +101,8 @@ const ENGINE_CSS = `
   box-sizing: border-box;
 }
 
-.pie-root .pie-line::selection,
-.pie-root .pie-fallback *::selection {
+.pie-root[data-selection-enabled="true"] .pie-line::selection,
+.pie-root[data-selection-enabled="true"] .pie-fallback *::selection {
   background: var(--pie-selection-bg);
   color: var(--pie-selection-color);
 }
@@ -316,6 +316,51 @@ const resolveRegions = (regions: Record<string, RegionConfig> | undefined): Reco
   return resolved
 }
 
+const resolveStageConfig = (stage: ImageEngineSceneConfig['stage']): ResolvedStage => {
+  const aspectRatio = numberOr(stage?.aspectRatio, DEFAULT_STAGE.aspectRatio)
+
+  return {
+    aspectRatio: aspectRatio > 0 ? aspectRatio : DEFAULT_STAGE.aspectRatio,
+    minHeight: Math.max(0, numberOr(stage?.minHeight, DEFAULT_STAGE.minHeight)),
+    background: textOr(stage?.background, DEFAULT_STAGE.background),
+    padding: Math.max(0, numberOr(stage?.padding, DEFAULT_STAGE.padding)),
+    borderRadius: Math.max(0, numberOr(stage?.borderRadius, DEFAULT_STAGE.borderRadius)),
+  }
+}
+
+const resolveLayoutConfig = (layout: ImageEngineSceneConfig['layout']): ResolvedLayout => {
+  const minScale = clamp(numberOr(layout?.minScale, DEFAULT_LAYOUT.minScale), 0.1, 1)
+
+  return {
+    outerPadding: Math.max(0, numberOr(layout?.outerPadding, DEFAULT_LAYOUT.outerPadding)),
+    horizontalPadding: Math.max(0, numberOr(layout?.horizontalPadding, DEFAULT_LAYOUT.horizontalPadding)),
+    verticalPadding: Math.max(0, numberOr(layout?.verticalPadding, DEFAULT_LAYOUT.verticalPadding)),
+    minSlotWidth: Math.max(24, numberOr(layout?.minSlotWidth, DEFAULT_LAYOUT.minSlotWidth)),
+    minScale,
+    scaleStep: clamp(numberOr(layout?.scaleStep, DEFAULT_LAYOUT.scaleStep), 0.01, 1),
+    fallbackBelowWidth: Math.max(0, numberOr(layout?.fallbackBelowWidth, DEFAULT_LAYOUT.fallbackBelowWidth)),
+  }
+}
+
+const getFontMetrics = (
+  style: ResolvedBlockStyle,
+  width: number,
+  scale: number,
+): { fontSize: number; lineHeightPx: number; font: string } => {
+  const fontSize = clamp(
+    width * style.fontSizeRatio * scale,
+    style.minFontSize * scale,
+    style.maxFontSize * scale,
+  )
+  const lineHeightPx = Math.max(14, Math.round(fontSize * style.lineHeight))
+
+  return {
+    fontSize,
+    lineHeightPx,
+    font: `${style.fontWeight} ${fontSize}px ${style.fontFamily}`,
+  }
+}
+
 const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
   const mergedColors: ResolvedColors = {
     text: { ...DEFAULT_COLORS.text, ...objectOrEmpty(scene.colors?.text) } as ResolvedColors['text'],
@@ -327,8 +372,8 @@ const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
     ),
   }
 
-  const resolvedStage: ResolvedStage = { ...DEFAULT_STAGE, ...objectOrEmpty(scene.stage) }
-  const resolvedLayout: ResolvedLayout = { ...DEFAULT_LAYOUT, ...objectOrEmpty(scene.layout) }
+  const resolvedStage = resolveStageConfig(scene.stage)
+  const resolvedLayout = resolveLayoutConfig(scene.layout)
   const resolvedResize: ResolvedResize = { ...DEFAULT_RESIZE, ...objectOrEmpty(scene.resize) }
   const resolvedColumnSplit = mergeColumns(DEFAULT_COLUMN_SPLIT, scene.columnSplit)
   const resolvedInteraction: Required<InteractionConfig> = {
@@ -668,14 +713,19 @@ export class PretextImageEngine implements ImageTextEngine {
     this.state.width = width
     this.state.height = height
     this.root.dataset.selectable = String(this.scene.interaction.selectable)
+    this.root.dataset.selectionEnabled = String(
+      this.scene.interaction.selectable && this.scene.colors.selection.enabled,
+    )
     this.root.style.setProperty('--pie-selection-bg', this.scene.colors.selection.background)
     this.root.style.setProperty('--pie-selection-color', this.scene.colors.selection.color)
 
     this.syncCanvasBuffers(width, height)
 
+    const allowFallback = this.scene.resize.fallbackMode === 'below'
+
     if (
       this.scene.resize.preserveFullText &&
-      this.scene.resize.fallbackMode === 'below' &&
+      allowFallback &&
       width <= this.scene.layout.fallbackBelowWidth
     ) {
       this.applyFallback(this.scene.resize.fallbackLabel)
@@ -698,7 +748,7 @@ export class PretextImageEngine implements ImageTextEngine {
       }
     }
 
-    if (this.scene.resize.preserveFullText && this.scene.resize.fallbackMode === 'below') {
+    if (this.scene.resize.preserveFullText && allowFallback) {
       this.applyFallback(this.scene.resize.fallbackLabel)
       return
     }
@@ -708,7 +758,21 @@ export class PretextImageEngine implements ImageTextEngine {
       return
     }
 
-    this.applyFallback('No readable slots were available inside the overlay.')
+    if (allowFallback) {
+      this.applyFallback('No readable slots were available inside the overlay.')
+      return
+    }
+
+    this.applyMasked(
+      {
+        lines: [],
+        debugSlots: [],
+        overflowed: true,
+        renderedLines: 0,
+        scale: bestPartial?.scale ?? candidates.at(-1) ?? 1,
+      },
+      'No readable slots were available inside the overlay.',
+    )
   }
 
   destroy(): void {
@@ -738,6 +802,8 @@ export class PretextImageEngine implements ImageTextEngine {
 
   private async loadAssets(): Promise<void> {
     const signature = `${this.scene.assets.baseSrc}::${this.scene.assets.overlaySrc}`
+    this.baseImage.style.objectFit = this.scene.assets.fit
+    this.overlayImage.style.objectFit = this.scene.assets.fit
 
     if (signature === this.imageSignature && this.baseImage.naturalWidth && this.overlayImage.naturalWidth) {
       this.syncStageAppearance()
@@ -747,8 +813,6 @@ export class PretextImageEngine implements ImageTextEngine {
     this.imageSignature = signature
     this.baseImage.src = this.scene.assets.baseSrc
     this.overlayImage.src = this.scene.assets.overlaySrc
-    this.baseImage.style.objectFit = this.scene.assets.fit
-    this.overlayImage.style.objectFit = this.scene.assets.fit
 
     await Promise.all([waitForImage(this.baseImage), waitForImage(this.overlayImage)])
     this.syncStageAppearance()
@@ -756,11 +820,21 @@ export class PretextImageEngine implements ImageTextEngine {
 
   private syncStageAppearance(): void {
     const ratio = this.scene.stage.aspectRatio || this.baseImage.naturalWidth / this.baseImage.naturalHeight
+    const alt = this.scene.meta.alt?.trim() ?? ''
     this.stageShell.style.padding = `${this.scene.stage.padding}px`
     this.stage.style.aspectRatio = `${ratio}`
     this.stage.style.minHeight = `${this.scene.stage.minHeight}px`
     this.stage.style.background = this.scene.stage.background
     this.stage.style.borderRadius = `${this.scene.stage.borderRadius}px`
+
+    if (alt) {
+      this.stage.setAttribute('role', 'img')
+      this.stage.setAttribute('aria-label', alt)
+      return
+    }
+
+    this.stage.removeAttribute('role')
+    this.stage.removeAttribute('aria-label')
   }
 
   private syncCanvasBuffers(width: number, height: number): void {
@@ -798,6 +872,7 @@ export class PretextImageEngine implements ImageTextEngine {
     lineX: number,
     lineY: number,
     lineWidth: number,
+    lineHeightPx: number,
     style: ResolvedBlockStyle,
     block: TextBlockConfig,
   ): LineAppearance {
@@ -808,7 +883,7 @@ export class PretextImageEngine implements ImageTextEngine {
       lineX,
       lineY,
       lineWidth + blockHighlight.paddingX * 2,
-      style.minFontSize * style.lineHeight + blockHighlight.paddingY * 2,
+      lineHeightPx + blockHighlight.paddingY * 2,
     )
     const useDarkText =
       textConfig.mode === 'auto' ? sample >= textConfig.luminanceThreshold : false
@@ -960,13 +1035,7 @@ export class PretextImageEngine implements ImageTextEngine {
       const style = this.resolveBlockStyle(block)
       const text =
         style.textTransform === 'uppercase' ? block.text.toUpperCase() : block.text
-      const fontSize = clamp(
-        width * style.fontSizeRatio * scale,
-        style.minFontSize * scale,
-        style.maxFontSize * scale,
-      )
-      const lineHeightPx = Math.max(14, Math.round(fontSize * style.lineHeight))
-      const font = `${style.fontWeight} ${fontSize}px ${style.fontFamily}`
+      const { font, lineHeightPx } = getFontMetrics(style, width, scale)
       const prepared = prepareWithSegments(text, font)
       const region = block.region ? this.scene.regions[block.region] ?? null : null
       const regionTop = region ? Math.max(this.scene.layout.outerPadding, Math.round(region.yStart * height)) : this.scene.layout.outerPadding
@@ -1005,7 +1074,14 @@ export class PretextImageEngine implements ImageTextEngine {
             break
           }
 
-          const appearance = this.resolveLineAppearance(slot.left, bandTop, line.width, style, block)
+          const appearance = this.resolveLineAppearance(
+            slot.left,
+            bandTop,
+            line.width,
+            lineHeightPx,
+            style,
+            block,
+          )
 
           lines.push({
             text: line.text,
@@ -1065,23 +1141,15 @@ export class PretextImageEngine implements ImageTextEngine {
     const lineFragment = document.createDocumentFragment()
 
     result.lines.forEach((line) => {
+      const { fontSize, lineHeightPx } = getFontMetrics(line.style, this.state.width, result.scale)
       const element = document.createElement('div')
       element.className = `pie-line pie-line-${sanitizeStyleName(line.styleName)}`
       element.textContent = line.text
       element.style.left = `${Math.round(line.x)}px`
       element.style.top = `${Math.round(line.y)}px`
       element.style.color = line.appearance.textColor
-      element.style.font = `${line.style.fontWeight} ${Math.round(
-        clamp(
-          this.state.width * line.style.fontSizeRatio * result.scale,
-          line.style.minFontSize * result.scale,
-          line.style.maxFontSize * result.scale,
-        ),
-      )}px ${line.style.fontFamily}`
-      element.style.lineHeight = `${Math.max(
-        14,
-        Math.round(this.state.width * line.style.fontSizeRatio * line.style.lineHeight * result.scale),
-      )}px`
+      element.style.font = `${line.style.fontWeight} ${Math.round(fontSize)}px ${line.style.fontFamily}`
+      element.style.lineHeight = `${lineHeightPx}px`
       element.style.letterSpacing = `${line.style.letterSpacing}px`
       element.style.textTransform = line.style.textTransform
       element.style.padding = `${line.appearance.paddingY}px ${line.appearance.paddingX}px`
@@ -1100,18 +1168,20 @@ export class PretextImageEngine implements ImageTextEngine {
 
     this.lineLayer.append(lineFragment)
 
-    if (this.scene.debug.enabled && this.scene.debug.showSlots) {
+    if (this.scene.debug.enabled && (this.scene.debug.showSlots || this.scene.debug.showRegions)) {
       const debugFragment = document.createDocumentFragment()
 
-      result.debugSlots.forEach((slot) => {
-        const element = document.createElement('div')
-        element.className = 'pie-slot'
-        element.style.left = `${slot.x}px`
-        element.style.top = `${slot.y}px`
-        element.style.width = `${slot.width}px`
-        element.style.height = `${slot.height}px`
-        debugFragment.append(element)
-      })
+      if (this.scene.debug.showSlots) {
+        result.debugSlots.forEach((slot) => {
+          const element = document.createElement('div')
+          element.className = 'pie-slot'
+          element.style.left = `${slot.x}px`
+          element.style.top = `${slot.y}px`
+          element.style.width = `${slot.width}px`
+          element.style.height = `${slot.height}px`
+          debugFragment.append(element)
+        })
+      }
 
       if (this.scene.debug.showRegions) {
         Object.values(this.scene.regions).forEach((region) => {
