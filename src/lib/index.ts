@@ -1,0 +1,22 @@
+export { createPretextImageEngine, PretextImageEngine } from './engine'
+export type {
+  BlockStyleConfig,
+  ColorConfig,
+  ColumnSplitConfig,
+  CSSColorValue,
+  DebugConfig,
+  EngineState,
+  HighlightConfig,
+  ImageEngineSceneConfig,
+  ImageTextEngine,
+  InteractionConfig,
+  LayoutConfig,
+  RegionConfig,
+  ResizeConfig,
+  SceneAssetConfig,
+  SceneMeta,
+  StageConfig,
+  TextBlockConfig,
+  TextColorConfig,
+  TextStyleName,
+} from './types'

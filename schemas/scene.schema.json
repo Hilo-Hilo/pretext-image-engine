@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/schemas/scene.schema.json",
+  "title": "Pretext Image Engine Scene",
+  "type": "object",
+  "required": ["meta", "assets", "blocks"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "alt": { "type": "string" },
+        "author": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "required": ["baseSrc", "overlaySrc"],
+      "properties": {
+        "baseSrc": { "type": "string" },
+        "overlaySrc": { "type": "string" },
+        "alphaThreshold": { "type": "number", "minimum": 0 },
+        "fit": {
+          "type": "string",
+          "enum": ["cover", "contain"]
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "properties": {
+        "aspectRatio": { "type": "number", "exclusiveMinimum": 0 },
+        "minHeight": { "type": "number", "minimum": 0 },
+        "background": { "type": "string" },
+        "padding": { "type": "number", "minimum": 0 },
+        "borderRadius": { "type": "number", "minimum": 0 }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "properties": {
+        "outerPadding": { "type": "number", "minimum": 0 },
+        "horizontalPadding": { "type": "number", "minimum": 0 },
+        "verticalPadding": { "type": "number", "minimum": 0 },
+        "minSlotWidth": { "type": "number", "minimum": 0 },
+        "minScale": { "type": "number", "minimum": 0.1, "maximum": 1 },
+        "scaleStep": { "type": "number", "minimum": 0.01, "maximum": 1 },
+        "fallbackBelowWidth": { "type": "number", "minimum": 0 }
+      }
+    },
+    "resize": {
+      "type": "object",
+      "properties": {
+        "preserveFullText": { "type": "boolean" },
+        "fallbackMode": {
+          "type": "string",
+          "enum": ["below", "none"]
+        },
+        "fallbackLabel": { "type": "string" }
+      }
+    },
+    "colors": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "object",
+          "properties": {
+            "mode": { "type": "string", "enum": ["fixed", "auto"] },
+            "color": { "type": "string" },
+            "lightColor": { "type": "string" },
+            "darkColor": { "type": "string" },
+            "luminanceThreshold": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "highlight": {
+          "$ref": "#/$defs/highlight"
+        },
+        "shadow": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "color": { "type": "string" },
+            "blur": { "type": "number", "minimum": 0 },
+            "offsetX": { "type": "number" },
+            "offsetY": { "type": "number" }
+          }
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "color": { "type": "string" },
+            "background": { "type": "string" }
+          }
+        }
+      }
+    },
+    "columnSplit": {
+      "$ref": "#/$defs/columnSplit"
+    },
+    "interaction": {
+      "type": "object",
+      "properties": {
+        "selectable": { "type": "boolean" }
+      }
+    },
+    "debug": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "showSlots": { "type": "boolean" },
+        "showRegions": { "type": "boolean" },
+        "showSampling": { "type": "boolean" }
+      }
+    },
+    "styles": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/blockStyle"
+      }
+    },
+    "regions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "xStart": { "type": "number", "minimum": 0, "maximum": 1 },
+          "xEnd": { "type": "number", "minimum": 0, "maximum": 1 },
+          "yStart": { "type": "number", "minimum": 0, "maximum": 1 },
+          "yEnd": { "type": "number", "minimum": 0, "maximum": 1 },
+          "anchorX": { "type": "number", "minimum": 0, "maximum": 1 },
+          "slotOrder": {
+            "type": "string",
+            "enum": ["left-to-right", "right-to-left", "center-out"]
+          },
+          "minSlotWidth": { "type": "number", "minimum": 0 },
+          "columnSplit": { "$ref": "#/$defs/columnSplit" }
+        }
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["style", "text"],
+        "properties": {
+          "id": { "type": "string" },
+          "style": { "type": "string" },
+          "text": { "type": "string" },
+          "region": { "type": "string" },
+          "regionOrder": {
+            "type": "string",
+            "enum": ["left-to-right", "right-to-left", "center-out"]
+          },
+          "allowMultiSlot": { "type": "boolean" },
+          "styleOverride": { "$ref": "#/$defs/blockStyle" },
+          "highlight": { "$ref": "#/$defs/highlight" },
+          "columns": { "$ref": "#/$defs/columnSplit" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "highlight": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": {
+          "type": "string",
+          "enum": ["off", "pill", "block", "auto"]
+        },
+        "color": { "type": "string" },
+        "lightColor": { "type": "string" },
+        "darkColor": { "type": "string" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "paddingX": { "type": "number", "minimum": 0 },
+        "paddingY": { "type": "number", "minimum": 0 },
+        "radius": { "type": "number", "minimum": 0 },
+        "blur": { "type": "number", "minimum": 0 }
+      }
+    },
+    "columnSplit": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["off", "auto", "fixed"]
+        },
+        "preferredColumns": { "type": "number", "minimum": 1 },
+        "maxColumns": { "type": "number", "minimum": 1 },
+        "minColumnWidth": { "type": "number", "minimum": 0 },
+        "gap": { "type": "number", "minimum": 0 },
+        "applyToStyles": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "blockStyle": {
+      "type": "object",
+      "properties": {
+        "fontFamily": { "type": "string" },
+        "fontWeight": { "type": "number" },
+        "fontSizeRatio": { "type": "number", "minimum": 0 },
+        "minFontSize": { "type": "number", "minimum": 0 },
+        "maxFontSize": { "type": "number", "minimum": 0 },
+        "lineHeight": { "type": "number", "minimum": 0 },
+        "gapAfter": { "type": "number", "minimum": 0 },
+        "allowMultiSlot": { "type": "boolean" },
+        "letterSpacing": { "type": "number" },
+        "textTransform": {
+          "type": "string",
+          "enum": ["none", "uppercase"]
+        },
+        "highlight": { "$ref": "#/$defs/highlight" },
+        "columns": { "$ref": "#/$defs/columnSplit" }
+      }
+    }
+  }
+}

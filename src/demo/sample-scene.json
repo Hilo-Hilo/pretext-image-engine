@@ -1,0 +1,145 @@
+{
+  "meta": {
+    "id": "san-francisco-bay",
+    "name": "San Francisco Bay",
+    "description": "A demo scene with two transparent openings and region-aware text placement.",
+    "alt": "A hazy golden-hour view of the Bay Bridge leading toward the San Francisco skyline.",
+    "author": "Hanson Wen",
+    "tags": ["demo", "regions", "auto-color", "fallback"]
+  },
+  "assets": {
+    "baseSrc": "/scenes/san-francisco/base.png",
+    "overlaySrc": "/scenes/san-francisco/overlay.png",
+    "alphaThreshold": 20,
+    "fit": "cover"
+  },
+  "stage": {
+    "minHeight": 420,
+    "background": "#0b0e12",
+    "padding": 12,
+    "borderRadius": 28
+  },
+  "layout": {
+    "outerPadding": 16,
+    "horizontalPadding": 8,
+    "verticalPadding": 2,
+    "minSlotWidth": 52,
+    "minScale": 0.68,
+    "scaleStep": 0.08,
+    "fallbackBelowWidth": 720
+  },
+  "resize": {
+    "preserveFullText": true,
+    "fallbackMode": "below",
+    "fallbackLabel": "Full text moved below the image at this size."
+  },
+  "interaction": {
+    "selectable": false
+  },
+  "colors": {
+    "text": {
+      "mode": "auto",
+      "color": "#f8f1e7",
+      "lightColor": "#f8f1e7",
+      "darkColor": "#0f141a",
+      "luminanceThreshold": 0.63
+    },
+    "highlight": {
+      "enabled": true,
+      "mode": "auto",
+      "color": "rgba(8, 10, 15, 0.56)",
+      "lightColor": "rgba(248, 241, 230, 0.9)",
+      "darkColor": "rgba(8, 10, 15, 0.62)",
+      "opacity": 0.9,
+      "paddingX": 8,
+      "paddingY": 4,
+      "radius": 12,
+      "blur": 22
+    },
+    "shadow": {
+      "enabled": true,
+      "color": "rgba(8, 10, 14, 0.42)",
+      "blur": 16,
+      "offsetX": 0,
+      "offsetY": 6
+    },
+    "selection": {
+      "enabled": true,
+      "color": "#0d1117",
+      "background": "rgba(245, 221, 171, 0.72)"
+    }
+  },
+  "columnSplit": {
+    "mode": "auto",
+    "preferredColumns": 2,
+    "maxColumns": 2,
+    "minColumnWidth": 150,
+    "gap": 22,
+    "applyToStyles": ["body"]
+  },
+  "regions": {
+    "sky": {
+      "xStart": 0.52,
+      "xEnd": 0.98,
+      "yStart": 0.02,
+      "yEnd": 0.48,
+      "anchorX": 0.78,
+      "slotOrder": "center-out",
+      "minSlotWidth": 64
+    },
+    "water": {
+      "xStart": 0.0,
+      "xEnd": 0.73,
+      "yStart": 0.48,
+      "yEnd": 0.98,
+      "anchorX": 0.24,
+      "slotOrder": "left-to-right",
+      "minSlotWidth": 52,
+      "columnSplit": {
+        "mode": "auto",
+        "preferredColumns": 2,
+        "maxColumns": 2,
+        "minColumnWidth": 150,
+        "gap": 20,
+        "applyToStyles": ["body"]
+      }
+    }
+  },
+  "styles": {
+    "eyebrow": {
+      "highlight": {
+        "enabled": false,
+        "mode": "off"
+      }
+    },
+    "heading": {
+      "highlight": {
+        "enabled": true,
+        "mode": "pill",
+        "paddingX": 10,
+        "paddingY": 6,
+        "radius": 14
+      }
+    }
+  },
+  "blocks": [
+    {
+      "id": "eyebrow",
+      "style": "eyebrow",
+      "region": "sky",
+      "text": "SAN FRANCISCO BAY"
+    },
+    {
+      "id": "headline",
+      "style": "heading",
+      "region": "sky",
+      "text": "Bridge into haze."
+    },
+    {
+      "id": "body",
+      "style": "body",
+      "region": "water",
+      "text": "Two transparent regions keep the skyline and bridge in front while the copy lands in the cleared sky and water."
+    }
+  ]
+}

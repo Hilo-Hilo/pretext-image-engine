@@ -1,0 +1,55 @@
+{
+  "name": "pretext-image-engine",
+  "description": "A configurable image-aware text layout engine built on Pretext.",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Hilo-Hilo/pretext-image-engine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hilo-Hilo/pretext-image-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hilo-Hilo/pretext-image-engine/issues"
+  },
+  "keywords": [
+    "pretext",
+    "image-layout",
+    "text-wrap",
+    "editorial-layout",
+    "overlay-mask",
+    "typescript"
+  ],
+  "main": "./lib/index.cjs",
+  "module": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "require": "./lib/index.cjs"
+    }
+  },
+  "files": [
+    "lib",
+    "schemas",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build:lib": "tsup src/lib/index.ts --format esm,cjs --dts --clean --out-dir lib",
+    "build:demo": "vite build",
+    "build": "npm run typecheck && npm run build:lib && npm run build:demo",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.4"
+  }
+}

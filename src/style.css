@@ -1,0 +1,263 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;600&family=IBM+Plex+Mono:wght@500;700&family=Source+Serif+4:opsz,wght@8..60,400;600&display=swap');
+
+:root {
+  color: #e9edf3;
+  background:
+    radial-gradient(circle at top left, rgba(255, 205, 145, 0.08), transparent 26%),
+    linear-gradient(180deg, #0b0f13 0%, #10161d 44%, #11151c 100%);
+  font: 16px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+code {
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.9em;
+}
+
+#app {
+  width: min(1400px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1rem 0 2rem;
+}
+
+.shell {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.hero,
+.control-panel,
+.preview-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    rgba(10, 13, 18, 0.6);
+  backdrop-filter: blur(18px);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.8fr);
+  gap: 1.2rem;
+  padding: clamp(1.2rem, 3vw, 2rem);
+}
+
+.hero-copy {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.hero-copy h1 {
+  margin: 0;
+  font: 600 clamp(2rem, 5vw, 3.8rem)/0.98 "Fraunces", Georgia, serif;
+  letter-spacing: -0.04em;
+}
+
+.lede,
+.preview-hint,
+.field-note,
+.status-message {
+  color: rgba(222, 230, 240, 0.82);
+}
+
+.hero-notes {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
+.stat {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stat span,
+.eyebrow {
+  color: rgba(255, 211, 167, 0.92);
+  font: 700 0.75rem/1.2 "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.stat strong {
+  font-weight: 600;
+  color: #fff8ef;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.control-panel,
+.preview-panel {
+  padding: 1rem;
+}
+
+.control-panel {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.panel-block,
+.preview-frame {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.panel-heading {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.panel-heading h2,
+.preview-meta h2 {
+  margin: 0;
+  font: 600 1.3rem/1.1 "Fraunces", Georgia, serif;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field span,
+.toggle span {
+  font-weight: 600;
+  color: #f7efe4;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+textarea {
+  width: 100%;
+  min-height: 560px;
+  resize: vertical;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(11, 14, 19, 0.82);
+  color: #e9edf3;
+  font: 500 0.83rem/1.55 "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.button-row button {
+  min-height: 2.9rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f5cb9c, #d68748);
+  color: #1f130b;
+  font-weight: 700;
+}
+
+.button-row .button-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f9f1e7;
+}
+
+.status-message[data-error="true"] {
+  color: #ffb3b3;
+}
+
+.preview-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.preview-meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.preview-stage-width {
+  width: 100%;
+  margin: 0 auto;
+}
+
+#engine-mount {
+  width: 100%;
+}
+
+@media (max-width: 1080px) {
+  .hero,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  textarea {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 640px) {
+  #app {
+    width: min(100% - 1rem, 1400px);
+  }
+
+  .hero,
+  .control-panel,
+  .preview-panel {
+    border-radius: 22px;
+  }
+
+  .preview-stage-width {
+    width: 100%;
+  }
+}
