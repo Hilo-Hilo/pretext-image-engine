@@ -6,6 +6,9 @@ export type TextColorMode = 'fixed' | 'auto'
 export type HighlightMode = 'off' | 'pill' | 'block' | 'auto'
 export type FallbackMode = 'below' | 'none'
 export type TextBlockScrollMode = 'static' | 'reveal' | 'sticky-start-reveal'
+export type V2TextRole = 'eyebrow' | 'headline' | 'lede' | 'body' | 'caption' | 'cta' | 'annotation'
+export type V2BackdropMode = 'auto' | 'none' | 'shadow' | 'line' | 'panel'
+export type V2SubjectZoneKind = 'protect' | 'soft-protect'
 
 export interface SceneMeta {
   id?: string
@@ -18,7 +21,7 @@ export interface SceneMeta {
 
 export interface SceneAssetConfig {
   baseSrc: string
-  overlaySrc: string
+  overlaySrc?: string
   alphaThreshold?: number
   fit?: 'cover' | 'contain'
 }
@@ -135,6 +138,80 @@ export interface BlockStyleConfig {
   columns?: ColumnSplitConfig
 }
 
+export interface V2SubjectZoneConfig {
+  id?: string
+  kind?: V2SubjectZoneKind
+  x: number
+  y: number
+  width: number
+  height: number
+  padding?: number
+}
+
+export interface V2SlotConfig {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  active?: boolean
+  locked?: boolean
+  preferredRoles?: V2TextRole[]
+}
+
+export interface V2BackdropConfig {
+  mode?: V2BackdropMode
+  panelOpacity?: number
+  panelPadding?: number
+  panelRadius?: number
+  blur?: number
+  tint?: CSSColorValue
+}
+
+export interface V2TextColorStrategyConfig {
+  forceTone?: 'light' | 'dark' | 'auto'
+  lightColor?: CSSColorValue
+  darkColor?: CSSColorValue
+  accentColor?: CSSColorValue
+}
+
+export interface V2LayoutConfig {
+  gridColumns?: number
+  gridRows?: number
+  minCellScore?: number
+  minSlotCells?: number
+  subjectPadding?: number
+  maxSlots?: number
+  mobileSingleSlotBelow?: number
+  preferWiderSlots?: boolean
+}
+
+export interface V2DebugConfig {
+  showProtection?: boolean
+  showSlotScores?: boolean
+  showActiveSlotsOnly?: boolean
+}
+
+export interface V2SceneConfig {
+  enabled?: boolean
+  layout?: V2LayoutConfig
+  subjectZones?: V2SubjectZoneConfig[]
+  slots?: V2SlotConfig[]
+  activeSlotIds?: string[]
+  bannedSlotIds?: string[]
+  backdrop?: V2BackdropConfig
+  colors?: V2TextColorStrategyConfig
+  debug?: V2DebugConfig
+}
+
+export interface V2TextBlockConfig {
+  role?: V2TextRole
+  priority?: number
+  pinnedSlotId?: string
+  backdrop?: V2BackdropMode
+  preferredTone?: 'light' | 'dark' | 'auto'
+}
+
 export interface TextBlockConfig {
   id?: string
   style: TextStyleName
@@ -146,6 +223,7 @@ export interface TextBlockConfig {
   highlight?: HighlightConfig
   columns?: ColumnSplitConfig
   scroll?: TextBlockScrollConfig
+  v2?: V2TextBlockConfig
 }
 
 export interface DebugConfig {
@@ -168,6 +246,7 @@ export interface ImageEngineSceneConfig {
   styles?: Record<string, BlockStyleConfig>
   regions?: Record<string, RegionConfig>
   blocks: TextBlockConfig[]
+  v2?: V2SceneConfig
 }
 
 export interface LineAppearance {

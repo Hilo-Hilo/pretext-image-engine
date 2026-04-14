@@ -51,18 +51,14 @@ const clamp = (value: number, min: number, max: number): number => Math.min(max,
 
 const assetExists = async (src: string): Promise<boolean> => {
   try {
-    const response = await fetch(src, { method: 'HEAD' })
+    const response = await fetch(src, { method: 'GET' })
 
-    if (response.ok) {
-      return true
+    if (!response.ok) {
+      return false
     }
 
-    if (response.status === 405) {
-      const fallback = await fetch(src, { method: 'GET' })
-      return fallback.ok
-    }
-
-    return false
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+    return contentType.startsWith('image/')
   } catch {
     return false
   }
@@ -71,10 +67,15 @@ const assetExists = async (src: string): Promise<boolean> => {
 const sceneAssetsAvailable = async (scene: ImageEngineSceneConfig): Promise<boolean> => {
   const [baseReady, overlayReady] = await Promise.all([
     assetExists(scene.assets.baseSrc),
-    assetExists(scene.assets.overlaySrc),
+    scene.assets.overlaySrc ? assetExists(scene.assets.overlaySrc) : Promise.resolve(true),
   ])
 
   return baseReady && overlayReady
+}
+
+const runtimeDebug = globalThis as typeof globalThis & {
+  __pieDemoDebug?: Record<string, unknown>
+  __pieEngine?: ImageTextEngine
 }
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -193,9 +194,9 @@ const bootstrap = async (): Promise<void> => {
           <div class="panel-block">
             <div class="panel-heading">
               <p class="eyebrow">Config</p>
-              <h2>Scene JSON</h2>
+              <h2 id="scene-editor-heading">Scene JSON</h2>
             </div>
-            <textarea id="scene-editor" spellcheck="false"></textarea>
+            <textarea id="scene-editor" aria-labelledby="scene-editor-heading" spellcheck="false"></textarea>
           </div>
         </aside>
 
@@ -338,6 +339,8 @@ const bootstrap = async (): Promise<void> => {
     },
   })
 
+  runtimeDebug.__pieDemoDebug = { phase: 'bootstrap-start', initialSceneKey, localSceneReady }
+
   let currentSceneKey = initialSceneKey
   let engine: ImageTextEngine = createPretextImageEngine(
     engineMount,
@@ -347,6 +350,9 @@ const bootstrap = async (): Promise<void> => {
       initialProgress: 1,
     },
   )
+
+  runtimeDebug.__pieEngine = engine
+  runtimeDebug.__pieDemoDebug = { ...(runtimeDebug.__pieDemoDebug ?? {}), phase: 'engine-created' }
 
   const setPreviewWidth = (value: number): void => {
     previewStageWidth.style.width = `${value}%`
@@ -427,17 +433,28 @@ const bootstrap = async (): Promise<void> => {
   }
 
   const applyScene = async (scene: ImageEngineSceneConfig, successMessage: string): Promise<void> => {
+    runtimeDebug.__pieDemoDebug = {
+      ...(runtimeDebug.__pieDemoDebug ?? {}),
+      phase: 'apply-scene-start',
+      successMessage,
+      scrollDriven: scrollProgressToggle.checked,
+    }
     await engine.ready
+    runtimeDebug.__pieDemoDebug = { ...(runtimeDebug.__pieDemoDebug ?? {}), phase: 'engine-ready' }
     await engine.update(scene)
+    runtimeDebug.__pieDemoDebug = { ...(runtimeDebug.__pieDemoDebug ?? {}), phase: 'scene-updated' }
 
     if (scrollProgressToggle.checked) {
       syncProgressFromScroll()
+      scheduleRender()
       setStatus(successMessage)
       return
     }
 
     setProgressValue(Number(progressSlider.value))
+    scheduleRender()
     setStatus(successMessage)
+    runtimeDebug.__pieDemoDebug = { ...(runtimeDebug.__pieDemoDebug ?? {}), phase: 'apply-scene-complete' }
   }
 
   const loadScene = async (key: DemoSceneKey): Promise<void> => {
@@ -460,16 +477,15 @@ const bootstrap = async (): Promise<void> => {
   updateSceneChrome()
 
   try {
-    await engine.ready
-    setProgressValue(Number(progressSlider.value))
-    scheduleRender()
-    setStatus(
+    await applyScene(
+      readSceneFromEditor(),
       localSceneReady
         ? 'Local test scene loaded from ignored assets.'
         : 'Bundled sample loaded. Add images to public/scenes/local-test to enable the local scene.',
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to initialize the engine preview.'
+    runtimeDebug.__pieDemoDebug = { ...(runtimeDebug.__pieDemoDebug ?? {}), phase: 'bootstrap-error', message }
     setStatus(message, true)
   }
 

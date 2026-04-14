@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/pretext-image-engine/schemas/scene.v2.schema.json",
+  "title": "Pretext Image Engine Scene V2",
+  "type": "object",
+  "required": ["version", "image", "analysis", "content"],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "image": {
+      "type": "object",
+      "required": ["src", "width", "height"],
+      "properties": {
+        "src": { "type": "string" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "hash": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "analysis": {
+      "type": "object",
+      "required": ["slots"],
+      "properties": {
+        "protectedRegions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/protectedRegion" }
+        },
+        "slots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slot" }
+        },
+        "palette": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "content": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/contentBlock" }
+    },
+    "overrides": {
+      "$ref": "#/$defs/overrides"
+    },
+    "composeResult": {
+      "type": "object",
+      "properties": {
+        "chosenSlots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "backdropPlan": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/backdropMode" }
+        },
+        "debug": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "number", "minimum": 0, "maximum": 1 },
+        { "type": "number", "minimum": 0, "maximum": 1 }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "bbox": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "width": { "type": "number", "minimum": 0, "maximum": 1 },
+        "height": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "backdropMode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "shadow-only",
+        "stroke-glow",
+        "line-highlight",
+        "grouped-highlight",
+        "gradient-veil",
+        "masked-tonal-lift",
+        "glass-panel",
+        "local-blur"
+      ]
+    },
+    "protectedRegion": {
+      "type": "object",
+      "required": ["id", "zone", "polygon"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "zone": {
+          "type": "string",
+          "enum": ["hard", "soft", "caution", "safe"]
+        },
+        "polygon": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/point" },
+          "minItems": 3
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "slot": {
+      "type": "object",
+      "required": ["id", "polygon", "bbox", "preferredRoles"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^S[0-9]+$" },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive", "locked", "rejected"]
+        },
+        "polygon": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/point" },
+          "minItems": 3
+        },
+        "bbox": { "$ref": "#/$defs/bbox" },
+        "backgroundType": { "type": "string" },
+        "preferredRoles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["eyebrow", "headline", "dek", "body", "caption", "cta", "annotation"]
+          }
+        },
+        "recommendedAlignment": {
+          "type": "string",
+          "enum": ["left", "center", "right", "mixed"]
+        },
+        "recommendedTextColorFamily": { "type": "string" },
+        "recommendedBackdropMode": { "$ref": "#/$defs/backdropMode" },
+        "widthProfile": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["y", "width", "insetLeft", "insetRight"],
+            "properties": {
+              "y": { "type": "number", "minimum": 0, "maximum": 1 },
+              "width": { "type": "number", "minimum": 0, "maximum": 1 },
+              "insetLeft": { "type": "number", "minimum": 0, "maximum": 1 },
+              "insetRight": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "legibilityScore": { "type": "number", "minimum": 0, "maximum": 1 },
+            "aestheticScore": { "type": "number", "minimum": 0, "maximum": 1 },
+            "subjectClearanceScore": { "type": "number", "minimum": 0, "maximum": 1 },
+            "headlineCapacity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "bodyCapacity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": true
+        },
+        "adjacentSlots": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "contentBlock": {
+      "type": "object",
+      "required": ["id", "role", "text", "priority"],
+      "properties": {
+        "id": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": ["eyebrow", "headline", "dek", "body", "caption", "cta", "annotation"]
+        },
+        "text": { "type": "string" },
+        "priority": { "type": "number" },
+        "maxLines": { "type": "number", "minimum": 1 },
+        "alignmentPreference": {
+          "type": "string",
+          "enum": ["left", "center", "right", "auto"]
+        },
+        "canOverlapSoftZones": { "type": "boolean" },
+        "canUseBackdrop": { "type": "boolean" },
+        "pinnedSlotId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "overrides": {
+      "type": "object",
+      "properties": {
+        "activeSlots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "bannedSlots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "subjectPadding": { "type": "number", "minimum": 0, "maximum": 1 },
+        "colorMode": {
+          "type": "string",
+          "enum": ["auto", "locked", "monochrome-editorial", "high-contrast"]
+        },
+        "backdrop": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["auto", "manual", "hybrid"]
+            },
+            "panelRadius": { "type": "number", "minimum": 0 },
+            "panelOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "blur": { "type": "number", "minimum": 0 },
+            "tint": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -6,6 +6,9 @@ type TextColorMode = 'fixed' | 'auto';
 type HighlightMode = 'off' | 'pill' | 'block' | 'auto';
 type FallbackMode = 'below' | 'none';
 type TextBlockScrollMode = 'static' | 'reveal' | 'sticky-start-reveal';
+type V2TextRole = 'eyebrow' | 'headline' | 'lede' | 'body' | 'caption' | 'cta' | 'annotation';
+type V2BackdropMode = 'auto' | 'none' | 'shadow' | 'line' | 'panel';
+type V2SubjectZoneKind = 'protect' | 'soft-protect';
 interface SceneMeta {
     id?: string;
     name: string;
@@ -16,7 +19,7 @@ interface SceneMeta {
 }
 interface SceneAssetConfig {
     baseSrc: string;
-    overlaySrc: string;
+    overlaySrc?: string;
     alphaThreshold?: number;
     fit?: 'cover' | 'contain';
 }
@@ -119,6 +122,72 @@ interface BlockStyleConfig {
     highlight?: HighlightConfig;
     columns?: ColumnSplitConfig;
 }
+interface V2SubjectZoneConfig {
+    id?: string;
+    kind?: V2SubjectZoneKind;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    padding?: number;
+}
+interface V2SlotConfig {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    active?: boolean;
+    locked?: boolean;
+    preferredRoles?: V2TextRole[];
+}
+interface V2BackdropConfig {
+    mode?: V2BackdropMode;
+    panelOpacity?: number;
+    panelPadding?: number;
+    panelRadius?: number;
+    blur?: number;
+    tint?: CSSColorValue;
+}
+interface V2TextColorStrategyConfig {
+    forceTone?: 'light' | 'dark' | 'auto';
+    lightColor?: CSSColorValue;
+    darkColor?: CSSColorValue;
+    accentColor?: CSSColorValue;
+}
+interface V2LayoutConfig {
+    gridColumns?: number;
+    gridRows?: number;
+    minCellScore?: number;
+    minSlotCells?: number;
+    subjectPadding?: number;
+    maxSlots?: number;
+    mobileSingleSlotBelow?: number;
+    preferWiderSlots?: boolean;
+}
+interface V2DebugConfig {
+    showProtection?: boolean;
+    showSlotScores?: boolean;
+    showActiveSlotsOnly?: boolean;
+}
+interface V2SceneConfig {
+    enabled?: boolean;
+    layout?: V2LayoutConfig;
+    subjectZones?: V2SubjectZoneConfig[];
+    slots?: V2SlotConfig[];
+    activeSlotIds?: string[];
+    bannedSlotIds?: string[];
+    backdrop?: V2BackdropConfig;
+    colors?: V2TextColorStrategyConfig;
+    debug?: V2DebugConfig;
+}
+interface V2TextBlockConfig {
+    role?: V2TextRole;
+    priority?: number;
+    pinnedSlotId?: string;
+    backdrop?: V2BackdropMode;
+    preferredTone?: 'light' | 'dark' | 'auto';
+}
 interface TextBlockConfig {
     id?: string;
     style: TextStyleName;
@@ -130,6 +199,7 @@ interface TextBlockConfig {
     highlight?: HighlightConfig;
     columns?: ColumnSplitConfig;
     scroll?: TextBlockScrollConfig;
+    v2?: V2TextBlockConfig;
 }
 interface DebugConfig {
     enabled?: boolean;
@@ -150,6 +220,7 @@ interface ImageEngineSceneConfig {
     styles?: Record<string, BlockStyleConfig>;
     regions?: Record<string, RegionConfig>;
     blocks: TextBlockConfig[];
+    v2?: V2SceneConfig;
 }
 interface EngineState {
     layoutMode: 'masked' | 'fallback';
@@ -183,6 +254,7 @@ declare class PretextImageEngine implements ImageTextEngine {
     private readonly baseImage;
     private readonly overlayImage;
     private readonly lineLayer;
+    private readonly panelLayer;
     private readonly debugLayer;
     private readonly status;
     private readonly statusBadge;
@@ -210,6 +282,7 @@ declare class PretextImageEngine implements ImageTextEngine {
     private loadAssets;
     private syncStageAppearance;
     private syncCanvasBuffers;
+    private applyProtectionMask;
     private sampleLuminance;
     private resolveLineAppearance;
     private getTransparentSlots;

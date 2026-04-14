@@ -106,6 +106,7 @@ export const createScene = (
   regions: overrides.regions,
   stage: overrides.stage,
   styles: overrides.styles,
+  v2: overrides.v2,
 })
 
 beforeEach(() => {

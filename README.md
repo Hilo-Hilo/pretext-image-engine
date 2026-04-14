@@ -267,6 +267,15 @@ When `resize.preserveFullText` is `false`, the engine keeps the text inside the 
 - **Vanilla DOM**: import the stylesheet once, instantiate on a container, and wire scroll/resize listeners in the host page.
 - **Agents and tooling**: prefer explicit CSS import plus `injectStyles: false`, since that makes bundling and head management predictable.
 
+## Pretext Image Engine V2 Blueprint
+
+A repository-local redesign blueprint for the next-generation composition-aware engine now lives in `docs/`:
+
+- `docs/pretext-image-engine-v2.md` — detailed system design and implementation plan
+- `docs/pretext-image-engine-v2.html` — browser-viewable rendering of the blueprint
+- `docs/pretext-image-engine-v2-example.json` — example V2 scene export with detected and active slots
+- `docs/pretext-image-engine-v2-architecture.png` — rendered architecture diagram
+
 ## Local Development
 
 ```bash

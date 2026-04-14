@@ -13,6 +13,7 @@ import {
   DEFAULT_STAGE,
 } from './defaults'
 import { ENGINE_CSS, ENGINE_STYLE_ID } from './styles'
+import { buildV2Plan, resolveV2BlockBackdrop, resolveV2PanelColor, type PlannedV2Slot } from './v2'
 import type {
   BlockStyleConfig,
   ColumnSplitConfig,
@@ -74,6 +75,7 @@ type ResolvedScene = {
   styles: Record<string, ResolvedBlockStyle>
   regions: Record<string, ResolvedRegion>
   blocks: TextBlockConfig[]
+  v2: ImageEngineSceneConfig['v2']
 }
 
 type Slot = {
@@ -97,6 +99,9 @@ type LayoutLine = {
   appearance: LineAppearance
   scroll: ResolvedBlockScroll
   revealThreshold: number
+  slotId: string | null
+  backdropMode: 'none' | 'shadow' | 'line' | 'panel'
+  panelColor: string | null
 }
 
 type LayoutBlock = {
@@ -104,15 +109,25 @@ type LayoutBlock = {
   blockIndex: number
   scroll: ResolvedBlockScroll
   firstLineId: string | null
+  slotId: string | null
 }
 
 type MaskedLayoutResult = {
   lines: LayoutLine[]
   blocks: LayoutBlock[]
-  debugSlots: Array<{ x: number; y: number; width: number; height: number }>
+  debugSlots: Array<{
+    x: number
+    y: number
+    width: number
+    height: number
+    label?: string
+    kind?: 'slot' | 'region' | 'protection' | 'manual-slot' | 'subject-zone'
+    active?: boolean
+  }>
   overflowed: boolean
   renderedLines: number
   scale: number
+  statusText?: string
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
@@ -303,6 +318,7 @@ const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
     styles: resolveStyles(scene.styles, scene.blocks),
     regions: resolveRegions(scene.regions),
     blocks: scene.blocks,
+    v2: scene.v2,
   }
 }
 
@@ -346,24 +362,80 @@ const ensureEngineStyles = (doc: Document, injectStyles: boolean): void => {
 }
 
 const waitForImage = async (image: HTMLImageElement): Promise<void> => {
-  if (image.complete && image.naturalWidth > 0) {
-    return
-  }
-
-  if (typeof image.decode === 'function') {
-    try {
-      await image.decode()
+  if (image.complete) {
+    if (image.naturalWidth > 0) {
       return
-    } catch {
-      // Some browsers throw transient decode errors for images that still finish loading.
     }
+
+    throw new Error(`Unable to load ${image.currentSrc || image.src}`)
   }
 
   await new Promise<void>((resolve, reject) => {
-    image.addEventListener('load', () => resolve(), { once: true })
-    image.addEventListener('error', () => reject(new Error(`Unable to load ${image.src}`)), {
-      once: true,
-    })
+    let settled = false
+
+    const finish = (): void => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      resolve()
+    }
+
+    const fail = (): void => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      reject(new Error(`Unable to load ${image.currentSrc || image.src}`))
+    }
+
+    const cleanup = (): void => {
+      image.removeEventListener('load', finish)
+      image.removeEventListener('error', fail)
+      if (pollTimer !== null) {
+        clearInterval(pollTimer)
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+      }
+    }
+
+    image.addEventListener('load', finish, { once: true })
+    image.addEventListener('error', fail, { once: true })
+
+    const pollTimer = window.setInterval(() => {
+      if (!image.complete) {
+        return
+      }
+
+      if (image.naturalWidth > 0) {
+        finish()
+        return
+      }
+
+      fail()
+    }, 50)
+
+    const timeoutId = window.setTimeout(() => {
+      if (image.complete && image.naturalWidth > 0) {
+        finish()
+        return
+      }
+
+      fail()
+    }, 5000)
+
+    if (typeof image.decode === 'function') {
+      void image.decode().then(finish).catch(() => {
+        if (image.complete && image.naturalWidth > 0) {
+          finish()
+        }
+      })
+    }
   })
 }
 
@@ -583,6 +655,31 @@ const createLineElement = (
   return element
 }
 
+type PanelElementConfig = {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  color: string
+  blur: number
+  radius: number
+}
+
+const createPanelElement = (doc: Document, panel: PanelElementConfig): HTMLDivElement => {
+  const element = doc.createElement('div')
+  element.className = 'pie-panel'
+  element.dataset.panelId = panel.id
+  element.style.left = `${panel.x}px`
+  element.style.top = `${panel.y}px`
+  element.style.width = `${panel.width}px`
+  element.style.height = `${panel.height}px`
+  element.style.background = panel.color
+  element.style.backdropFilter = `blur(${panel.blur}px)`
+  element.style.borderRadius = `${panel.radius}px`
+  return element
+}
+
 const getSafeDocument = (container: HTMLElement): Document => {
   const doc = container.ownerDocument
 
@@ -607,6 +704,7 @@ export class PretextImageEngine implements ImageTextEngine {
   private readonly baseImage: HTMLImageElement
   private readonly overlayImage: HTMLImageElement
   private readonly lineLayer: HTMLDivElement
+  private readonly panelLayer: HTMLDivElement
   private readonly debugLayer: HTMLDivElement
   private readonly status: HTMLDivElement
   private readonly statusBadge: HTMLDivElement
@@ -655,13 +753,17 @@ export class PretextImageEngine implements ImageTextEngine {
     this.baseImage = this.doc.createElement('img')
     this.baseImage.className = 'pie-base'
     this.baseImage.alt = ''
+    this.baseImage.setAttribute('aria-hidden', 'true')
     this.baseImage.decoding = 'async'
     this.overlayImage = this.doc.createElement('img')
     this.overlayImage.className = 'pie-overlay'
     this.overlayImage.alt = ''
+    this.overlayImage.setAttribute('aria-hidden', 'true')
     this.overlayImage.decoding = 'async'
     this.lineLayer = this.doc.createElement('div')
     this.lineLayer.className = 'pie-line-layer'
+    this.panelLayer = this.doc.createElement('div')
+    this.panelLayer.className = 'pie-panel-layer'
     this.debugLayer = this.doc.createElement('div')
     this.debugLayer.className = 'pie-debug-layer'
     this.status = this.doc.createElement('div')
@@ -677,7 +779,7 @@ export class PretextImageEngine implements ImageTextEngine {
     this.fallbackContent = this.doc.createElement('div')
     this.fallbackContent.className = 'pie-fallback-content'
     this.fallback.append(this.fallbackLabel, this.fallbackContent)
-    this.stage.append(this.baseImage, this.lineLayer, this.debugLayer, this.overlayImage, this.status)
+    this.stage.append(this.baseImage, this.panelLayer, this.lineLayer, this.debugLayer, this.overlayImage, this.status)
     this.stageShell.append(this.stickyLayer, this.stage, this.fallback)
     this.root.append(this.stageShell)
     this.container.replaceChildren(this.root)
@@ -710,7 +812,10 @@ export class PretextImageEngine implements ImageTextEngine {
   }
 
   render(): void {
-    if (!this.baseImage.naturalWidth || !this.overlayImage.naturalWidth) {
+    const runtimeDebug = globalThis as typeof globalThis & { __pieLastRender?: Record<string, unknown> }
+
+    if (!this.baseImage.naturalWidth) {
+      runtimeDebug.__pieLastRender = { reason: 'base-image-not-ready' }
       return
     }
 
@@ -718,7 +823,18 @@ export class PretextImageEngine implements ImageTextEngine {
     const height = Math.max(0, Math.round(this.stage.clientHeight))
 
     if (!width || !height) {
+      runtimeDebug.__pieLastRender = { reason: 'stage-size-zero', width, height }
       return
+    }
+
+    runtimeDebug.__pieLastRender = {
+      reason: 'entered-render',
+      width,
+      height,
+      preserveFullText: this.scene.resize.preserveFullText,
+      fallbackMode: this.scene.resize.fallbackMode,
+      fallbackBelowWidth: this.scene.layout.fallbackBelowWidth,
+      v2Enabled: Boolean(this.scene.v2?.enabled),
     }
 
     this.state.width = width
@@ -732,6 +848,22 @@ export class PretextImageEngine implements ImageTextEngine {
 
     this.syncCanvasBuffers(width, height)
 
+    const v2Plan = this.scene.v2?.enabled
+      ? buildV2Plan({
+          scene: this.scene as unknown as ImageEngineSceneConfig,
+          width,
+          height,
+          basePixels: this.baseContext.getImageData(0, 0, width, height).data,
+          overlayPixels: this.scene.assets.overlaySrc
+            ? this.overlayContext.getImageData(0, 0, width, height).data
+            : null,
+        })
+      : null
+
+    if (v2Plan && !this.scene.assets.overlaySrc) {
+      this.applyProtectionMask(v2Plan.protectionRects)
+    }
+
     const allowFallback = this.scene.resize.fallbackMode === 'below'
 
     if (
@@ -739,6 +871,12 @@ export class PretextImageEngine implements ImageTextEngine {
       allowFallback &&
       width <= this.scene.layout.fallbackBelowWidth
     ) {
+      runtimeDebug.__pieLastRender = {
+        ...(runtimeDebug.__pieLastRender ?? {}),
+        reason: 'fallback-below-width',
+        width,
+        height,
+      }
       this.applyFallback(this.scene.resize.fallbackLabel)
       return
     }
@@ -747,10 +885,17 @@ export class PretextImageEngine implements ImageTextEngine {
     let bestPartial: MaskedLayoutResult | null = null
 
     for (const scale of candidates) {
-      const result = this.measureMaskedLayout(width, height, scale)
+      const result = this.measureMaskedLayout(width, height, scale, v2Plan?.blocks, v2Plan?.regions, v2Plan?.slots)
 
       if (result.renderedLines > 0 && !result.overflowed) {
-        this.applyMasked(result)
+        runtimeDebug.__pieLastRender = {
+          ...(runtimeDebug.__pieLastRender ?? {}),
+          reason: 'applied-masked-layout',
+          renderedLines: result.renderedLines,
+          overflowed: result.overflowed,
+          scale,
+        }
+        this.applyMasked(result, result.statusText ?? v2Plan?.statusText ?? 'Masked layout active')
         return
       }
 
@@ -760,30 +905,58 @@ export class PretextImageEngine implements ImageTextEngine {
     }
 
     if (this.scene.resize.preserveFullText && allowFallback) {
+      runtimeDebug.__pieLastRender = {
+        ...(runtimeDebug.__pieLastRender ?? {}),
+        reason: 'fallback-after-measurement',
+        bestPartialRenderedLines: bestPartial?.renderedLines ?? 0,
+      }
       this.applyFallback(this.scene.resize.fallbackLabel)
       return
     }
 
     if (bestPartial !== null && bestPartial.renderedLines > 0) {
-      this.applyMasked(bestPartial, 'Text clipped inside the image at this size.')
+      runtimeDebug.__pieLastRender = {
+        ...(runtimeDebug.__pieLastRender ?? {}),
+        reason: 'applied-partial-layout',
+        renderedLines: bestPartial.renderedLines,
+        overflowed: bestPartial.overflowed,
+      }
+      this.applyMasked(bestPartial, bestPartial.statusText ?? 'Text clipped inside the image at this size.')
       return
     }
 
     if (allowFallback) {
+      runtimeDebug.__pieLastRender = {
+        ...(runtimeDebug.__pieLastRender ?? {}),
+        reason: 'fallback-no-readable-slots',
+      }
       this.applyFallback('No readable slots were available inside the overlay.')
       return
     }
 
+    runtimeDebug.__pieLastRender = {
+      ...(runtimeDebug.__pieLastRender ?? {}),
+      reason: 'applied-empty-layout',
+    }
     this.applyMasked(
       {
         lines: [],
         blocks: [],
-        debugSlots: [],
+        debugSlots: v2Plan?.debugRects.map((rect) => ({
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          label: rect.label,
+          kind: rect.kind,
+          active: rect.active,
+        })) ?? [],
         overflowed: true,
         renderedLines: 0,
         scale: bestPartial?.scale ?? candidates.at(-1) ?? 1,
+        statusText: v2Plan?.statusText,
       },
-      'No readable slots were available inside the overlay.',
+      v2Plan?.statusText ?? 'No readable slots were available inside the overlay.',
     )
   }
 
@@ -816,17 +989,28 @@ export class PretextImageEngine implements ImageTextEngine {
     const signature = `${this.scene.assets.baseSrc}::${this.scene.assets.overlaySrc}`
     this.baseImage.style.objectFit = this.scene.assets.fit
     this.overlayImage.style.objectFit = this.scene.assets.fit
+    this.overlayImage.hidden = !this.scene.assets.overlaySrc
 
-    if (signature === this.imageSignature && this.baseImage.naturalWidth && this.overlayImage.naturalWidth) {
+    if (
+      signature === this.imageSignature &&
+      this.baseImage.naturalWidth &&
+      (!this.scene.assets.overlaySrc || this.overlayImage.naturalWidth)
+    ) {
       this.syncStageAppearance()
       return
     }
 
     this.imageSignature = signature
     this.baseImage.src = this.scene.assets.baseSrc
-    this.overlayImage.src = this.scene.assets.overlaySrc
 
-    await Promise.all([waitForImage(this.baseImage), waitForImage(this.overlayImage)])
+    if (this.scene.assets.overlaySrc) {
+      this.overlayImage.src = this.scene.assets.overlaySrc
+      await Promise.all([waitForImage(this.baseImage), waitForImage(this.overlayImage)])
+    } else {
+      this.overlayImage.removeAttribute('src')
+      await waitForImage(this.baseImage)
+    }
+
     this.syncStageAppearance()
   }
 
@@ -855,7 +1039,31 @@ export class PretextImageEngine implements ImageTextEngine {
     this.overlayCanvas.width = width
     this.overlayCanvas.height = height
     drawFittedImage(this.baseContext, this.baseImage, width, height, this.scene.assets.fit)
-    drawFittedImage(this.overlayContext, this.overlayImage, width, height, this.scene.assets.fit)
+    this.overlayContext.clearRect(0, 0, width, height)
+
+    if (this.scene.assets.overlaySrc && this.overlayImage.naturalWidth) {
+      drawFittedImage(this.overlayContext, this.overlayImage, width, height, this.scene.assets.fit)
+    }
+  }
+
+  private applyProtectionMask(rects: Array<{ x: number; y: number; width: number; height: number }>): void {
+    if (!rects.length || typeof this.overlayContext.fillRect !== 'function') {
+      return
+    }
+
+    if (typeof this.overlayContext.save === 'function') {
+      this.overlayContext.save()
+    }
+
+    this.overlayContext.fillStyle = 'rgba(255, 255, 255, 1)'
+
+    rects.forEach((rect) => {
+      this.overlayContext.fillRect(rect.x, rect.y, rect.width, rect.height)
+    })
+
+    if (typeof this.overlayContext.restore === 'function') {
+      this.overlayContext.restore()
+    }
   }
 
   private sampleLuminance(x: number, y: number, width: number, height: number): number {
@@ -887,6 +1095,7 @@ export class PretextImageEngine implements ImageTextEngine {
     lineHeightPx: number,
     style: ResolvedBlockStyle,
     block: TextBlockConfig,
+    slotPlan: PlannedV2Slot | null = null,
   ): LineAppearance {
     const textConfig = this.scene.colors.text
     const blockHighlight = mergeHighlight(style.highlight, block.highlight)
@@ -897,18 +1106,34 @@ export class PretextImageEngine implements ImageTextEngine {
       lineWidth + blockHighlight.paddingX * 2,
       lineHeightPx + blockHighlight.paddingY * 2,
     )
+    const requestedTone = block.v2?.preferredTone ?? this.scene.v2?.colors?.forceTone ?? 'auto'
     const useDarkText =
-      textConfig.mode === 'auto' ? sample >= textConfig.luminanceThreshold : false
+      requestedTone === 'dark'
+        ? true
+        : requestedTone === 'light'
+          ? false
+          : slotPlan
+            ? slotPlan.recommendedTone === 'dark'
+            : textConfig.mode === 'auto'
+              ? sample >= textConfig.luminanceThreshold
+              : false
+    const v2Colors = this.scene.v2?.colors
     const textColor =
-      textConfig.mode === 'auto'
+      textConfig.mode === 'auto' || slotPlan
         ? useDarkText
-          ? textConfig.darkColor
-          : textConfig.lightColor
+          ? v2Colors?.darkColor ?? textConfig.darkColor
+          : v2Colors?.lightColor ?? textConfig.lightColor
         : textConfig.color
+
+    const resolvedBackdrop = slotPlan
+      ? resolveV2BlockBackdrop(slotPlan, block, this.scene as unknown as ImageEngineSceneConfig)
+      : blockHighlight.enabled && blockHighlight.mode !== 'off'
+        ? 'line'
+        : 'shadow'
 
     let backgroundColor: string | null = null
 
-    if (blockHighlight.enabled && blockHighlight.mode !== 'off') {
+    if (resolvedBackdrop === 'line' && blockHighlight.enabled && blockHighlight.mode !== 'off') {
       const highlightColor =
         blockHighlight.mode === 'auto'
           ? useDarkText
@@ -923,7 +1148,7 @@ export class PretextImageEngine implements ImageTextEngine {
       textColor,
       backgroundColor,
       shadowColor: shadow.color,
-      shadowBlur: shadow.enabled ? shadow.blur : 0,
+      shadowBlur: shadow.enabled || resolvedBackdrop === 'shadow' ? shadow.blur : 0,
       shadowOffsetX: shadow.offsetX,
       shadowOffsetY: shadow.offsetY,
       paddingX: blockHighlight.enabled ? blockHighlight.paddingX : 0,
@@ -1042,21 +1267,44 @@ export class PretextImageEngine implements ImageTextEngine {
     return [chooseSingleSlot(sorted, anchorX)]
   }
 
-  private measureMaskedLayout(width: number, height: number, scale: number): MaskedLayoutResult {
+  private measureMaskedLayout(
+    width: number,
+    height: number,
+    scale: number,
+    blockSource: TextBlockConfig[] = this.scene.blocks,
+    regionSource?: Record<string, RegionConfig>,
+    plannedSlots?: PlannedV2Slot[],
+  ): MaskedLayoutResult {
     const lines: LayoutLine[] = []
     const blocks: LayoutBlock[] = []
     const debugSlots: MaskedLayoutResult['debugSlots'] = []
+    const resolvedRegions = regionSource ? resolveRegions(regionSource) : this.scene.regions
     let globalCursor = this.scene.layout.outerPadding
     const regionCursors = new Map<string, number>()
 
-    for (const [blockIndex, block] of this.scene.blocks.entries()) {
+    if (this.scene.debug.enabled && this.scene.debug.showRegions && plannedSlots?.length) {
+      plannedSlots.forEach((slot) => {
+        debugSlots.push({
+          x: slot.x,
+          y: slot.y,
+          width: slot.width,
+          height: slot.height,
+          label: slot.id,
+          kind: 'slot',
+          active: slot.active,
+        })
+      })
+    }
+
+    for (const [blockIndex, block] of blockSource.entries()) {
       const blockId = block.id ?? `block-${blockIndex}`
       const style = this.resolveBlockStyle(block)
       const text =
         style.textTransform === 'uppercase' ? block.text.toUpperCase() : block.text
       const { font, fontSize, lineHeightPx } = getFontMetrics(style, width, scale)
       const prepared = prepareWithSegments(text, font)
-      const region = block.region ? this.scene.regions[block.region] ?? null : null
+      const region = block.region ? resolvedRegions[block.region] ?? null : null
+      const slotPlan = block.region ? plannedSlots?.find((slot) => slot.id === block.region) ?? null : null
       const scroll = resolveScrollConfig(block.scroll)
       const blockLineStart = lines.length
       const regionTop = region
@@ -1073,7 +1321,8 @@ export class PretextImageEngine implements ImageTextEngine {
       while (cursorTop + lineHeightPx <= regionBottom) {
         const bandTop = cursorTop
         const bandBottom = cursorTop + lineHeightPx
-        const slots = this.orderSlots(this.getTransparentSlots(bandTop, bandBottom, region), block, style, region)
+        const rawSlots = this.getTransparentSlots(bandTop, bandBottom, region)
+        const slots = this.orderSlots(rawSlots, block, style, region)
         let placed = false
 
         if (this.scene.debug.enabled && this.scene.debug.showSlots) {
@@ -1107,7 +1356,9 @@ export class PretextImageEngine implements ImageTextEngine {
             lineHeightPx,
             style,
             block,
+            slotPlan,
           )
+          const backdropMode = slotPlan ? resolveV2BlockBackdrop(slotPlan, block, this.scene as unknown as ImageEngineSceneConfig) : appearance.backgroundColor ? 'line' : 'shadow'
 
           lines.push({
             id: `${blockId}-line-${blockLineIndex}`,
@@ -1125,6 +1376,11 @@ export class PretextImageEngine implements ImageTextEngine {
             appearance,
             scroll,
             revealThreshold: 0,
+            slotId: slotPlan?.id ?? block.region ?? null,
+            backdropMode,
+            panelColor: slotPlan && backdropMode === 'panel'
+              ? resolveV2PanelColor(slotPlan, this.scene as unknown as ImageEngineSceneConfig)
+              : null,
           })
           blockLineIndex += 1
           cursor = line.end
@@ -1158,6 +1414,7 @@ export class PretextImageEngine implements ImageTextEngine {
         blockIndex,
         scroll,
         firstLineId: blockLineCount > 0 ? lines[blockLineStart]!.id : null,
+        slotId: block.region ?? null,
       })
 
       if (!blockFinished) {
@@ -1168,6 +1425,7 @@ export class PretextImageEngine implements ImageTextEngine {
           overflowed: true,
           renderedLines: lines.length,
           scale,
+          statusText: plannedSlots?.length ? `V2 auto layout active · ${plannedSlots.filter((slot) => slot.active).length} slot${plannedSlots.filter((slot) => slot.active).length === 1 ? '' : 's'} planned` : undefined,
         }
       }
     }
@@ -1179,6 +1437,7 @@ export class PretextImageEngine implements ImageTextEngine {
       overflowed: false,
       renderedLines: lines.length,
       scale,
+      statusText: plannedSlots?.length ? `V2 auto layout active · ${plannedSlots.filter((slot) => slot.active).length} slot${plannedSlots.filter((slot) => slot.active).length === 1 ? '' : 's'} planned` : undefined,
     }
   }
 
@@ -1188,18 +1447,61 @@ export class PretextImageEngine implements ImageTextEngine {
     this.activeLayout = result
     this.root.dataset.mode = 'masked'
     this.lineElements.clear()
+    this.panelLayer.replaceChildren()
     this.lineLayer.replaceChildren()
     this.debugLayer.replaceChildren()
     this.stickyInner.replaceChildren()
 
     const lineFragment = this.doc.createDocumentFragment()
+    const panelFragment = this.doc.createDocumentFragment()
+    const panelGroups = new Map<string, { x: number; y: number; right: number; bottom: number; color: string }>()
 
     result.lines.forEach((line) => {
       const element = createLineElement(this.doc, line, this.scene.interaction.selectable)
       this.lineElements.set(line.id, element)
       lineFragment.append(element)
+
+      if (line.backdropMode === 'panel' && line.panelColor) {
+        const key = line.slotId ?? line.blockId
+        const current = panelGroups.get(key)
+        const paddedLeft = Math.max(0, line.x - Math.max(8, line.appearance.paddingX * 2))
+        const paddedTop = Math.max(0, line.y - Math.max(6, line.appearance.paddingY * 2))
+        const paddedRight = line.x + line.width + Math.max(8, line.appearance.paddingX * 2)
+        const paddedBottom = line.y + line.lineHeightPx + Math.max(6, line.appearance.paddingY * 2)
+
+        if (current) {
+          current.x = Math.min(current.x, paddedLeft)
+          current.y = Math.min(current.y, paddedTop)
+          current.right = Math.max(current.right, paddedRight)
+          current.bottom = Math.max(current.bottom, paddedBottom)
+        } else {
+          panelGroups.set(key, {
+            x: paddedLeft,
+            y: paddedTop,
+            right: paddedRight,
+            bottom: paddedBottom,
+            color: line.panelColor,
+          })
+        }
+      }
     })
 
+    panelGroups.forEach((panel, key) => {
+      panelFragment.append(
+        createPanelElement(this.doc, {
+          id: key,
+          x: panel.x,
+          y: panel.y,
+          width: panel.right - panel.x,
+          height: panel.bottom - panel.y,
+          color: panel.color,
+          blur: this.scene.v2?.backdrop?.blur ?? 18,
+          radius: this.scene.v2?.backdrop?.panelRadius ?? 22,
+        }),
+      )
+    })
+
+    this.panelLayer.append(panelFragment)
     this.lineLayer.append(lineFragment)
 
     if (this.scene.debug.enabled && (this.scene.debug.showSlots || this.scene.debug.showRegions)) {
@@ -1208,11 +1510,25 @@ export class PretextImageEngine implements ImageTextEngine {
       if (this.scene.debug.showSlots) {
         result.debugSlots.forEach((slot) => {
           const element = this.doc.createElement('div')
-          element.className = 'pie-slot'
+          element.className = slot.kind === 'subject-zone' || slot.kind === 'protection' ? 'pie-region' : 'pie-slot'
+          if (slot.kind === 'manual-slot') {
+            element.dataset.variant = 'manual'
+          }
+          if (slot.active === false) {
+            element.dataset.active = 'false'
+          }
           element.style.left = `${slot.x}px`
           element.style.top = `${slot.y}px`
           element.style.width = `${slot.width}px`
           element.style.height = `${slot.height}px`
+
+          if (slot.label) {
+            const label = this.doc.createElement('span')
+            label.className = 'pie-debug-label'
+            label.textContent = slot.label
+            element.append(label)
+          }
+
           debugFragment.append(element)
         })
       }
@@ -1233,7 +1549,7 @@ export class PretextImageEngine implements ImageTextEngine {
     }
 
     this.fallback.hidden = true
-    this.statusBadge.textContent = statusText
+    this.statusBadge.textContent = result.statusText ?? statusText
     this.applyProgressProjection()
   }
 
