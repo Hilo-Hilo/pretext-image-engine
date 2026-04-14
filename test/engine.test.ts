@@ -325,6 +325,83 @@ describe('PretextImageEngine', () => {
     expect(getVisibleMaskedLines(container).length).toBe(getMaskedLines(container).length)
   })
 
+  it('renders a V2 auto-layout scene without requiring an overlay image', async () => {
+    setCanvasState({ basePixel: [236, 232, 224, 255], overlayAlpha: 0 })
+
+    const { container } = await mountEngine(
+      createScene({
+        assets: {
+          baseSrc: '/base.png',
+          overlaySrc: undefined,
+        },
+        debug: {
+          enabled: true,
+          showSlots: true,
+          showRegions: true,
+        },
+        blocks: [
+          {
+            id: 'hero-kicker',
+            style: 'eyebrow',
+            text: 'Auto layout',
+            v2: {
+              role: 'eyebrow',
+              pinnedSlotId: 'manual-right',
+            },
+          },
+          {
+            id: 'hero-headline',
+            style: 'heading',
+            text: 'Panels and slots should render from the V2 planner.',
+            v2: {
+              role: 'headline',
+              pinnedSlotId: 'manual-right',
+              backdrop: 'panel',
+            },
+          },
+        ],
+        v2: {
+          enabled: true,
+          layout: {
+            gridColumns: 6,
+            gridRows: 6,
+            maxSlots: 2,
+          },
+          subjectZones: [
+            {
+              id: 'subject-core',
+              x: 0.24,
+              y: 0.18,
+              width: 0.24,
+              height: 0.42,
+              padding: 0.02,
+            },
+          ],
+          slots: [
+            {
+              id: 'manual-right',
+              x: 0.58,
+              y: 0.12,
+              width: 0.28,
+              height: 0.3,
+              locked: true,
+              preferredRoles: ['headline', 'eyebrow'],
+            },
+          ],
+          backdrop: {
+            mode: 'panel',
+            panelOpacity: 0.82,
+          },
+        },
+      }),
+    )
+
+    expect(getMaskedLines(container).length).toBeGreaterThan(0)
+    expect(container.querySelector('.pie-panel')).not.toBeNull()
+    expect(container.querySelectorAll('.pie-slot').length).toBeGreaterThan(0)
+    expect(container.querySelector<HTMLElement>('.pie-status-badge')?.textContent).toMatch(/V2 auto layout active/i)
+  })
+
   it('supports explicit CSS delivery and optional runtime style injection', async () => {
     await mountEngine(createScene())
     expect(document.getElementById('pretext-image-engine-styles')).not.toBeNull()

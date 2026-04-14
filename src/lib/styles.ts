@@ -46,6 +46,7 @@ export const ENGINE_CSS = `
 
 .pie-base,
 .pie-overlay,
+.pie-panel-layer,
 .pie-line-layer,
 .pie-debug-layer,
 .pie-status {
@@ -61,6 +62,7 @@ export const ENGINE_CSS = `
   pointer-events: none;
 }
 
+.pie-panel-layer,
 .pie-line-layer,
 .pie-debug-layer {
   pointer-events: none;
@@ -82,10 +84,41 @@ export const ENGINE_CSS = `
   background: rgba(94, 237, 211, 0.1);
 }
 
+.pie-slot[data-variant="manual"] {
+  border-style: solid;
+  background: rgba(245, 221, 171, 0.1);
+}
+
+.pie-slot[data-active="false"] {
+  opacity: 0.42;
+}
+
 .pie-region {
   position: absolute;
   border: 1px solid rgba(245, 221, 171, 0.8);
   background: rgba(245, 221, 171, 0.08);
+}
+
+.pie-panel {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 42px rgba(7, 9, 12, 0.24);
+}
+
+.pie-debug-label {
+  position: absolute;
+  top: -1.35rem;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(10, 11, 14, 0.8);
+  color: rgba(248, 241, 230, 0.96);
+  font: 700 0.62rem/1.1 "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .pie-status {
