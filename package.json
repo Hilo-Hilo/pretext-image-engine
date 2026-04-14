@@ -42,14 +42,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "vite",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "build:lib": "tsup src/lib/index.ts --format esm,cjs --dts --clean --out-dir lib && node scripts/copy-lib-assets.mjs",
-    "build:demo": "vite build",
-    "build": "npm run typecheck && npm run test && npm run build:lib && npm run build:demo",
-    "preview": "vite preview",
+    "build": "npm run typecheck && npm run test && npm run build:lib",
     "prepublishOnly": "npm run build"
   },
   "publishConfig": {
@@ -59,10 +56,9 @@
     "happy-dom": "^20.8.9",
     "tsup": "^8.5.1",
     "typescript": "~5.9.3",
-    "vite": "^8.0.1",
     "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.4"
+    "@chenglou/pretext": "^0.0.5"
   }
 }

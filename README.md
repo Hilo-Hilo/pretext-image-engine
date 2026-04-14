@@ -8,21 +8,12 @@ Image-aware text layout for editorial compositions, built on [`@chenglou/pretext
 
 The engine takes a base image, a same-canvas overlay mask, and structured scene data, then lays text into transparent openings so the subject stays visually in front. It now also supports host-controlled scroll progression, so frontend apps can reveal text over time or keep a leading line sticky while the image moves through the page.
 
-<p align="center">
-  <img
-    src="https://raw.githubusercontent.com/Hilo-Hilo/pretext-image-engine/main/src/assets/hero.png"
-    alt="Pretext Image Engine preview"
-    width="320"
-  />
-</p>
-
 ## Links
 
 - npm package: https://www.npmjs.com/package/pretext-image-engine
 - GitHub repo: https://github.com/Hilo-Hilo/pretext-image-engine
 - Engine stylesheet: `pretext-image-engine/styles.css`
 - Scene schema: https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/schemas/scene.schema.json
-- Sample scene: https://github.com/Hilo-Hilo/pretext-image-engine/blob/main/src/demo/sample-scene.json
 
 ## Install
 
@@ -42,16 +33,16 @@ import {
   type ImageEngineSceneConfig,
 } from 'pretext-image-engine'
 
-const scene: ImageEngineSceneConfig = {
-  meta: {
-    name: 'Demo scene',
-    alt: 'A photo with text placed around the subject.',
-  },
-  assets: {
-    baseSrc: '/scenes/demo/base.png',
-    overlaySrc: '/scenes/demo/overlay.png',
-    fit: 'cover',
-  },
+  const scene: ImageEngineSceneConfig = {
+    meta: {
+      name: 'Sample scene',
+      alt: 'A photo with text placed around the subject.',
+    },
+    assets: {
+      baseSrc: '/path/to/base.png',
+      overlaySrc: '/path/to/overlay.png',
+      fit: 'cover',
+    },
   blocks: [
     { style: 'heading', text: 'Editorial image layout.' },
     {
@@ -199,7 +190,7 @@ Defaults:
 
 ## Scene Model
 
-The demo uses `src/demo/sample-scene.json` as a full reference. The JSON schema lives in `schemas/scene.schema.json`.
+Scene data follows `schemas/scene.schema.json`; build your own JSON config from that schema in your host app.
 
 Main sections:
 
@@ -280,22 +271,9 @@ A repository-local redesign blueprint for the next-generation composition-aware 
 
 ```bash
 npm install
-npm run dev
-```
-
-Optional local-only test scene:
-
-1. Copy your large test images into `public/scenes/local-test/base.png` and `public/scenes/local-test/overlay.png`
-2. Keep them untracked; the repo ignores those `.png` files on purpose
-3. Start the dev server and the test site will default to the local scene automatically when those files exist
-
-Useful commands:
-
-```bash
+npm run build
 npm run typecheck
 npm test
-npm run build
-npm run preview
 ```
 
 ## Caveats
