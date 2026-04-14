@@ -194,9 +194,9 @@ const bootstrap = async (): Promise<void> => {
           <div class="panel-block">
             <div class="panel-heading">
               <p class="eyebrow">Config</p>
-              <h2>Scene JSON</h2>
+              <h2 id="scene-editor-heading">Scene JSON</h2>
             </div>
-            <textarea id="scene-editor" spellcheck="false"></textarea>
+            <textarea id="scene-editor" aria-labelledby="scene-editor-heading" spellcheck="false"></textarea>
           </div>
         </aside>
 

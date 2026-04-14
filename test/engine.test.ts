@@ -412,6 +412,112 @@ describe('PretextImageEngine', () => {
     expect(document.getElementById('pretext-image-engine-styles')).toBeNull()
   })
 
+  it('keeps content available across responsive stage sizes', async () => {
+    setCanvasState({ basePixel: [236, 232, 224, 255], overlayAlpha: 0 })
+
+    const scene = createScene({
+      assets: {
+        baseSrc: '/base.png',
+        overlaySrc: undefined,
+      },
+      resize: {
+        preserveFullText: true,
+        fallbackMode: 'below',
+      },
+      blocks: [
+        {
+          id: 'hero-kicker',
+          style: 'eyebrow',
+          text: 'Selected work',
+          v2: { role: 'eyebrow', pinnedSlotId: 'top-left' },
+        },
+        {
+          id: 'hero-name',
+          style: 'heading',
+          text: 'Hanson Wen',
+          v2: { role: 'headline', pinnedSlotId: 'bottom-left' },
+        },
+        {
+          id: 'hero-summary',
+          style: 'body',
+          text: 'Product designer and creative technologist.',
+          v2: { role: 'body', pinnedSlotId: 'bottom-left' },
+        },
+        {
+          id: 'hero-card',
+          style: 'body',
+          text: 'Design systems, AI tooling, and product storytelling.',
+          v2: { role: 'body', pinnedSlotId: 'top-right', backdrop: 'panel' },
+        },
+      ],
+      v2: {
+        enabled: true,
+        layout: {
+          gridColumns: 6,
+          gridRows: 6,
+          maxSlots: 4,
+        },
+        subjectZones: [
+          {
+            id: 'bridge-core',
+            x: 0.36,
+            y: 0.2,
+            width: 0.28,
+            height: 0.5,
+            padding: 0.02,
+          },
+        ],
+        slots: [
+          { id: 'top-left', x: 0.04, y: 0.05, width: 0.24, height: 0.1, locked: true },
+          { id: 'top-right', x: 0.63, y: 0.06, width: 0.29, height: 0.2, locked: true },
+          { id: 'bottom-left', x: 0.08, y: 0.56, width: 0.36, height: 0.22, locked: true },
+          { id: 'bottom-right', x: 0.66, y: 0.75, width: 0.24, height: 0.12, locked: true },
+        ],
+        backdrop: {
+          mode: 'panel',
+          panelOpacity: 0.82,
+        },
+      },
+    })
+
+    const { container, engine, stage } = await mountEngine(scene)
+    const sizes = [
+      [320, 240],
+      [480, 320],
+      [768, 432],
+      [1024, 576],
+    ] as const
+
+    for (const [width, height] of sizes) {
+      setElementSize(stage, width, height)
+      engine.render()
+
+      const maskedVisible = getVisibleMaskedLines(container).length
+      const fallbackVisible = container.querySelector<HTMLElement>('.pie-fallback')?.hidden === false
+
+      expect(maskedVisible > 0 || fallbackVisible).toBe(true)
+    }
+  })
+
+  it('marks source images as decorative when the stage exposes alt text', async () => {
+    const { container } = await mountEngine(
+      createScene({
+        meta: {
+          name: 'Accessibility scene',
+          alt: 'A skyline with text placed around the subject',
+        },
+      }),
+    )
+
+    const baseImage = container.querySelector<HTMLImageElement>('.pie-base')
+    const overlayImage = container.querySelector<HTMLImageElement>('.pie-overlay')
+
+    expect(baseImage?.alt).toBe('')
+    expect(overlayImage?.alt).toBe('')
+    expect(baseImage?.getAttribute('aria-hidden')).toBe('true')
+    expect(overlayImage?.getAttribute('aria-hidden')).toBe('true')
+  })
+
   it('throws a clear error when instantiated without a usable DOM container', () => {
     expect(() => {
       createPretextImageEngine({ ownerDocument: null } as unknown as HTMLElement, createScene())

@@ -753,10 +753,12 @@ export class PretextImageEngine implements ImageTextEngine {
     this.baseImage = this.doc.createElement('img')
     this.baseImage.className = 'pie-base'
     this.baseImage.alt = ''
+    this.baseImage.setAttribute('aria-hidden', 'true')
     this.baseImage.decoding = 'async'
     this.overlayImage = this.doc.createElement('img')
     this.overlayImage.className = 'pie-overlay'
     this.overlayImage.alt = ''
+    this.overlayImage.setAttribute('aria-hidden', 'true')
     this.overlayImage.decoding = 'async'
     this.lineLayer = this.doc.createElement('div')
     this.lineLayer.className = 'pie-line-layer'
@@ -858,7 +860,7 @@ export class PretextImageEngine implements ImageTextEngine {
         })
       : null
 
-    if (v2Plan) {
+    if (v2Plan && !this.scene.assets.overlaySrc) {
       this.applyProtectionMask(v2Plan.protectionRects)
     }
 
