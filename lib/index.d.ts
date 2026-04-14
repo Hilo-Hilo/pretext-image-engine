@@ -285,7 +285,6 @@ declare class PretextImageEngine implements ImageTextEngine {
     private applyProtectionMask;
     private sampleLuminance;
     private resolveLineAppearance;
-    private getRegionSlots;
     private getTransparentSlots;
     private resolveBlockStyle;
     private resolveColumns;

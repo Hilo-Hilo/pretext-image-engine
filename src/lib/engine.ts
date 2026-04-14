@@ -1155,35 +1155,6 @@ export class PretextImageEngine implements ImageTextEngine {
     }
   }
 
-  private getRegionSlots(region: ResolvedRegion | null): Slot[] {
-    const leftLimit = Math.round(this.scene.layout.outerPadding)
-    const rightLimit = this.overlayCanvas.width - Math.round(this.scene.layout.outerPadding)
-    const minSlotWidth = Math.max(1, this.scene.layout.minSlotWidth)
-
-    if (!region) {
-      return [
-        {
-          left: leftLimit + this.scene.layout.horizontalPadding,
-          right: rightLimit - this.scene.layout.horizontalPadding,
-        },
-      ].filter((slot) => slot.right - slot.left >= minSlotWidth)
-    }
-
-    const regionLeft = Math.round(region.xStart * this.overlayCanvas.width)
-    const regionRight = Math.round(region.xEnd * this.overlayCanvas.width)
-    const left = Math.max(leftLimit, regionLeft) + this.scene.layout.horizontalPadding
-    const right = Math.min(rightLimit, regionRight) - this.scene.layout.horizontalPadding
-
-    return right - left >= minSlotWidth
-      ? [
-          {
-            left,
-            right,
-          },
-        ]
-      : []
-  }
-
   private getTransparentSlots(
     bandTop: number,
     bandBottom: number,
@@ -1348,7 +1319,7 @@ export class PretextImageEngine implements ImageTextEngine {
       while (cursorTop + lineHeightPx <= regionBottom) {
         const bandTop = cursorTop
         const bandBottom = cursorTop + lineHeightPx
-        const rawSlots = slotPlan ? this.getRegionSlots(region) : this.getTransparentSlots(bandTop, bandBottom, region)
+        const rawSlots = this.getTransparentSlots(bandTop, bandBottom, region)
         const slots = this.orderSlots(rawSlots, block, style, region)
         let placed = false
 
