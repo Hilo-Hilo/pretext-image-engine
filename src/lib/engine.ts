@@ -1563,8 +1563,17 @@ export class PretextImageEngine implements ImageTextEngine {
           ? regionCursors.get(block.region!) ?? regionTop
           : globalCursor
 
-        const embedWidth = Math.max(1, Math.round(block.width * scale))
-        const embedHeight = Math.max(1, Math.round(block.height * scale))
+        // Embeds are sized proportional to stage width (not scene-scale)
+        // so their size relative to the image stays constant regardless
+        // of how the layout engine chooses to scale text to fit content.
+        // The declared `block.width`/`block.height` are interpreted as
+        // pixels at a reference stage width of 1200 (a typical desktop
+        // render). At a 600-wide stage each embed is half-size; at 2400,
+        // double-size. Keeps embed/image ratio fixed across viewports.
+        const REFERENCE_STAGE_WIDTH = 1200
+        const stageRatio = width / REFERENCE_STAGE_WIDTH
+        const embedWidth = Math.max(1, Math.round(block.width * stageRatio))
+        const embedHeight = Math.max(1, Math.round(block.height * stageRatio))
         const gapAfter = Math.max(0, block.gapAfter ?? DEFAULT_EMBED_GAP_AFTER)
 
         // Horizontal placement within the region: use the region's anchorX as

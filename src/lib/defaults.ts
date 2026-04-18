@@ -93,14 +93,18 @@ export const DEFAULT_REVEAL: Required<RevealConfig> = {
   monotonic: false,
 }
 
+// Font-size clamps disabled by default: text is a pure ratio of stage
+// width so proportions stay constant as the viewport grows or shrinks.
+// Consumers can still set min/max per-style if they need a floor or
+// ceiling, but the engine no longer imposes one.
 export const DEFAULT_BLOCK_STYLES: Record<string, Required<BlockStyleConfig>> = {
   eyebrow: {
     fontFamily: '"IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace',
     fontWeight: 500,
     fontStyle: 'normal',
     fontSizeRatio: 0.014,
-    minFontSize: 11,
-    maxFontSize: 15,
+    minFontSize: 0,
+    maxFontSize: Infinity,
     lineHeight: 1.28,
     gapAfter: 10,
     allowMultiSlot: false,
@@ -114,8 +118,8 @@ export const DEFAULT_BLOCK_STYLES: Record<string, Required<BlockStyleConfig>> = 
     fontWeight: 300,
     fontStyle: 'normal',
     fontSizeRatio: 0.052,
-    minFontSize: 30,
-    maxFontSize: 68,
+    minFontSize: 0,
+    maxFontSize: Infinity,
     lineHeight: 1.02,
     gapAfter: 16,
     allowMultiSlot: false,
@@ -129,8 +133,8 @@ export const DEFAULT_BLOCK_STYLES: Record<string, Required<BlockStyleConfig>> = 
     fontWeight: 400,
     fontStyle: 'italic',
     fontSizeRatio: 0.026,
-    minFontSize: 18,
-    maxFontSize: 30,
+    minFontSize: 0,
+    maxFontSize: Infinity,
     lineHeight: 1.3,
     gapAfter: 14,
     allowMultiSlot: false,
@@ -144,8 +148,8 @@ export const DEFAULT_BLOCK_STYLES: Record<string, Required<BlockStyleConfig>> = 
     fontWeight: 400,
     fontStyle: 'normal',
     fontSizeRatio: 0.022,
-    minFontSize: 16,
-    maxFontSize: 24,
+    minFontSize: 0,
+    maxFontSize: Infinity,
     lineHeight: 1.45,
     gapAfter: 14,
     allowMultiSlot: true,
@@ -159,8 +163,8 @@ export const DEFAULT_BLOCK_STYLES: Record<string, Required<BlockStyleConfig>> = 
     fontWeight: 300,
     fontStyle: 'italic',
     fontSizeRatio: 0.018,
-    minFontSize: 14,
-    maxFontSize: 20,
+    minFontSize: 0,
+    maxFontSize: Infinity,
     lineHeight: 1.34,
     gapAfter: 10,
     allowMultiSlot: false,
