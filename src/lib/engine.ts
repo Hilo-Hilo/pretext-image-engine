@@ -1862,6 +1862,15 @@ export class PretextImageEngine implements ImageTextEngine {
       container.style.top = `${embed.y}px`
       container.style.width = `${embed.width}px`
       container.style.height = `${embed.height}px`
+      // Publish the same ratio the engine used to scale the embed box, so
+      // consumer stylesheets can scale their internal typography/spacing in
+      // lockstep. Without this, em-based text inside an embed stays a fixed
+      // pixel size regardless of stage width and overflows the box as soon
+      // as the stage shrinks (e.g. the user zooms in / resizes narrower).
+      // `embed.width / embed.config.width` naturally covers both the
+      // stage-ratio path and the narrow-region clamp path.
+      const embedScale = embed.width / Math.max(1, embed.config.width)
+      container.style.setProperty('--pie-embed-scale', embedScale.toFixed(4))
       if (this.scene.interaction.selectable) {
         container.style.userSelect = 'text'
       }

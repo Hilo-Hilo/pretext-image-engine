@@ -114,6 +114,14 @@
   opacity: 0;
   transition: opacity 220ms ease;
   pointer-events: inherit;
+  /* The engine sets `--pie-embed-scale` inline on each positioned embed
+   * to the ratio between the embed's rendered width and its configured
+   * width (i.e. the same factor that shrinks/grows the embed box with
+   * the stage). Consumer stylesheets multiply their baseline typography
+   * and fixed-pixel spacing by this to keep everything proportional at
+   * every stage width. Fallback embeds flow in document order and
+   * receive the default `1` so they render at their designed size. */
+  --pie-embed-scale: 1;
 }
 .pie-embed.pie-visible {
   opacity: 1;
