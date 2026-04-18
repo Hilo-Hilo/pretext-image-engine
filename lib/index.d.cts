@@ -390,13 +390,24 @@ interface CreateSceneInput {
     aspectRatio?: number;
 }
 declare function createScene(input: CreateSceneInput, overrides?: Partial<ImageEngineSceneConfig>): ImageEngineSceneConfig;
-interface PerImageScene {
+interface PerImageScene extends Partial<Omit<ImageEngineSceneConfig, 'meta' | 'assets' | 'regions' | 'blocks'>> {
     meta: SceneMeta;
     assets: SceneAssetConfig;
     regions: Record<string, RegionConfig>;
     blocks: TextBlockConfig[];
-    stage?: Pick<StageConfig, 'aspectRatio'>;
 }
+/**
+ * Deep merge of scene-level fields. The previous version only folded
+ * meta/assets/stage/regions/blocks and silently dropped every other
+ * top-level override (styles, colors, layout, resize, interaction,
+ * reveal, columnSplit, debug, v2). Scene JSONs relying on those fields
+ * (per-scene font sizes, text color, highlight palette) were having
+ * their overrides quietly discarded.
+ *
+ * Now: for each section the engine cares about, we shallow-merge
+ * per-image over defaults. Nested objects (like `colors.text`) are
+ * merged one level deep too.
+ */
 declare function composeScene(defaults: Partial<ImageEngineSceneConfig>, perImage: PerImageScene): ImageEngineSceneConfig;
 
 export { type BlockConfig, type BlockStyleConfig, type CSSColorValue, type ColorConfig, type ColumnSplitConfig, type CreateSceneInput, type DebugConfig, type EmbedBlockConfig, type EngineOptions, type EngineState, type HighlightConfig, type ImageEngineSceneConfig, type ImageTextEngine, type InteractionConfig, type LayoutConfig, type PerImageScene, PretextImageEngine, type RegionConfig, type ResizeConfig, type RevealConfig, type RevealUnit, type SceneAssetConfig, type SceneMeta, type ScrollSourceOptions, type StageConfig, type TextBlockConfig, type TextBlockScrollConfig, type TextBlockScrollMode, type TextColorConfig, type TextStyleName, composeScene, createPretextImageEngine, createScene };
