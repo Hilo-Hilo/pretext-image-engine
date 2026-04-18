@@ -223,6 +223,19 @@ export interface V2TextBlockConfig {
   preferredTone?: 'light' | 'dark' | 'auto'
 }
 
+export interface InlineLinkConfig {
+  /**
+   * Substring within `text` (or within any `lines[i]`) to render as a
+   * hyperlink. First occurrence wins per line. Plain string match; no
+   * regex. If the substring wraps across layout lines, each line's
+   * matching chars get wrapped in their own anchor (same href).
+   */
+  match: string
+  href: string
+  /** Optional accessible name override. */
+  alt?: string
+}
+
 export interface TextBlockConfig {
   /** Discriminator. Defaults to `'text'` when absent, for backward compatibility. */
   kind?: 'text'
@@ -240,6 +253,15 @@ export interface TextBlockConfig {
   columns?: ColumnSplitConfig
   scroll?: TextBlockScrollConfig
   v2?: V2TextBlockConfig
+  /**
+   * Optional inline hyperlinks rendered within the block's text. The
+   * engine locates each `match` substring after the text is split into
+   * reveal units and wraps those units in an `<a class="pie-inline-link">`
+   * so the link behaves like a normal in-paragraph anchor — no separate
+   * layout rectangle, no flow overlap. Safe across char/word reveal
+   * modes.
+   */
+  links?: InlineLinkConfig[]
 }
 
 /**

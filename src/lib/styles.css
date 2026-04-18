@@ -79,6 +79,21 @@
   transition: opacity 60ms linear;
 }
 
+/*
+ * Inline link styled to match surrounding body text. Consumers can
+ * override (e.g. different underline color) via their own rule; engine
+ * only guarantees the anchor is visually a continuation of the paragraph
+ * and has pointer-events: auto so clicks land.
+ */
+.pie-inline-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  pointer-events: inherit;
+  transition: text-decoration-color 140ms ease;
+}
+
 .pie-char.pie-visible,
 .pie-word.pie-visible {
   opacity: 1;

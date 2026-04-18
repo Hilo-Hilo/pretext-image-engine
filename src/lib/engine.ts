@@ -26,6 +26,7 @@ import type {
   HighlightConfig,
   ImageEngineSceneConfig,
   ImageTextEngine,
+  InlineLinkConfig,
   InteractionConfig,
   LineAppearance,
   RegionConfig,
@@ -38,6 +39,102 @@ import type {
   TextBlockScrollConfig,
   TextBlockScrollMode,
 } from './types'
+
+/**
+ * Break a line's text into alternating plain / linked segments so each
+ * link's matched substring can be wrapped in its own `<a>` during reveal
+ * splitting. First match per link wins (non-overlapping); links that
+ * don't match the current line's text contribute nothing.
+ */
+function buildLinkedSegments(
+  text: string,
+  links: InlineLinkConfig[],
+): Array<{ text: string; href?: string; alt?: string }> {
+  type Match = { start: number; end: number; href: string; alt?: string }
+  const matches: Match[] = []
+  for (const link of links) {
+    if (!link.match) continue
+    const idx = text.indexOf(link.match)
+    if (idx < 0) continue
+    matches.push({ start: idx, end: idx + link.match.length, href: link.href, alt: link.alt })
+  }
+  matches.sort((a, b) => a.start - b.start)
+  // Drop overlapping matches, keep earliest-start winner.
+  const clean: Match[] = []
+  let cursor = 0
+  for (const m of matches) {
+    if (m.start < cursor) continue
+    clean.push(m)
+    cursor = m.end
+  }
+  const segments: Array<{ text: string; href?: string; alt?: string }> = []
+  cursor = 0
+  for (const m of clean) {
+    if (m.start > cursor) segments.push({ text: text.slice(cursor, m.start) })
+    segments.push({ text: text.slice(m.start, m.end), href: m.href, alt: m.alt })
+    cursor = m.end
+  }
+  if (cursor < text.length) segments.push({ text: text.slice(cursor) })
+  return segments
+}
+
+function createInlineAnchor(doc: Document, href: string, alt?: string): HTMLAnchorElement {
+  const a = doc.createElement('a')
+  a.className = 'pie-inline-link'
+  a.href = href
+  if (alt) a.setAttribute('aria-label', alt)
+  if (/^https?:\/\//.test(href)) {
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+  }
+  return a
+}
+
+/**
+ * Given a line element and its source block, compute the per-line inline
+ * link descriptors — translating each link's match range from the block's
+ * full text into this line's local text. Handles links whose match spans
+ * multiple layout lines by emitting a partial link for each line the
+ * match touches.
+ *
+ * Relies on the caller iterating lines in block order; the `cursors` map
+ * tracks how many characters of each block's text have been consumed.
+ */
+function perLineLinksForElement(
+  el: HTMLElement,
+  block: TextBlockConfig,
+  cursors: Map<string, number>,
+): InlineLinkConfig[] | undefined {
+  if (!block.links || block.links.length === 0) return undefined
+  const blockText = block.text ?? (block.lines ?? []).join('\n')
+  if (!blockText) return undefined
+  const lineText = el.textContent ?? ''
+  if (!lineText) return undefined
+  const blockId = el.dataset.blockId ?? ''
+  const cursor = cursors.get(blockId) ?? 0
+  const lineStart = blockText.indexOf(lineText, cursor)
+  if (lineStart < 0) return undefined
+  const lineEnd = lineStart + lineText.length
+  cursors.set(blockId, lineEnd)
+
+  const result: InlineLinkConfig[] = []
+  for (const link of block.links) {
+    if (!link.match) continue
+    // For a simple single-occurrence match we search from the start of
+    // the block text. Multiple occurrences would need ranged tracking;
+    // rare enough to skip until someone needs it.
+    const matchStart = blockText.indexOf(link.match)
+    if (matchStart < 0) continue
+    const matchEnd = matchStart + link.match.length
+    const overlapStart = Math.max(matchStart, lineStart)
+    const overlapEnd = Math.min(matchEnd, lineEnd)
+    if (overlapStart >= overlapEnd) continue
+    const localMatch = lineText.slice(overlapStart - lineStart, overlapEnd - lineStart)
+    if (localMatch.length === 0) continue
+    result.push({ match: localMatch, href: link.href, alt: link.alt })
+  }
+  return result.length > 0 ? result : undefined
+}
 
 const isTextBlock = (block: BlockConfig): block is TextBlockConfig =>
   block.kind !== 'embed'
@@ -651,10 +748,12 @@ const buildFallbackBlock = (
   doc: Document,
   block: TextBlockConfig,
   style: ResolvedBlockStyle,
+  blockIndex: number,
 ): HTMLElement => {
   const tag = block.style === 'heading' ? 'h3' : 'p'
   const element = doc.createElement(tag)
   element.className = `pie-fallback-block pie-fallback-${sanitizeStyleName(block.style)}`
+  element.dataset.blockId = block.id ?? `block-${blockIndex}`
   const rawText = block.text ?? ''
   element.textContent = style.textTransform === 'uppercase' ? rawText.toUpperCase() : rawText
   return element
@@ -1838,8 +1937,26 @@ export class PretextImageEngine implements ImageTextEngine {
     this.statusBadge.textContent = result.statusText ?? statusText
 
     if (this.scene.reveal.unit !== 'line') {
+      // Track a cursor per block so wrapped lines can resolve their offset
+      // into the block's full text. Needed for inline links whose match
+      // spans the line boundary — we translate the [matchStart, matchEnd)
+      // range from block-text coords to this line's local coords.
+      const blockCursors = new Map<string, number>()
       this.lineElements.forEach((el) => {
-        this.splitTextIntoUnits(el, this.scene.reveal.unit as Exclude<RevealUnit, 'line'>)
+        const blockId = el.dataset.blockId
+        const block = blockId
+          ? (this.scene.blocks.find((b) => !isEmbedBlock(b) && b.id === blockId) as
+              | TextBlockConfig
+              | undefined)
+          : undefined
+        const perLineLinks = block
+          ? perLineLinksForElement(el, block, blockCursors)
+          : undefined
+        this.splitTextIntoUnits(
+          el,
+          this.scene.reveal.unit as Exclude<RevealUnit, 'line'>,
+          perLineLinks,
+        )
       })
     }
 
@@ -1934,24 +2051,39 @@ export class PretextImageEngine implements ImageTextEngine {
     }
   }
 
-  private splitTextIntoUnits(el: HTMLElement, unit: Exclude<RevealUnit, 'line'>): void {
+  private splitTextIntoUnits(
+    el: HTMLElement,
+    unit: Exclude<RevealUnit, 'line'>,
+    links?: InlineLinkConfig[],
+  ): void {
     const text = el.textContent ?? ''
     if (!text) return
     el.textContent = ''
     const className = unit === 'char' ? 'pie-char' : 'pie-word'
-    const tokens =
-      unit === 'char'
-        ? [...text]
-        : (text.match(/\s+|\S+/g) ?? [])
-    for (const token of tokens) {
-      if (unit === 'word' && /^\s+$/.test(token)) {
-        el.appendChild(this.doc.createTextNode(token))
-        continue
+
+    // Build non-overlapping segments. Each segment is either plain text or
+    // inside a link. Missing links → single plain segment.
+    const segments = links && links.length > 0
+      ? buildLinkedSegments(text, links)
+      : [{ text, href: undefined as string | undefined, alt: undefined as string | undefined }]
+
+    for (const segment of segments) {
+      const parent = segment.href ? createInlineAnchor(this.doc, segment.href, segment.alt) : el
+      if (parent !== el) el.appendChild(parent)
+      const tokens =
+        unit === 'char'
+          ? [...segment.text]
+          : (segment.text.match(/\s+|\S+/g) ?? [])
+      for (const token of tokens) {
+        if (unit === 'word' && /^\s+$/.test(token)) {
+          parent.appendChild(this.doc.createTextNode(token))
+          continue
+        }
+        const span = this.doc.createElement('span')
+        span.className = className
+        span.textContent = token
+        parent.appendChild(span)
       }
-      const span = this.doc.createElement('span')
-      span.className = className
-      span.textContent = token
-      el.appendChild(span)
     }
   }
 
@@ -2001,7 +2133,7 @@ export class PretextImageEngine implements ImageTextEngine {
         fragment.append(container)
         return
       }
-      fragment.append(buildFallbackBlock(this.doc, block, this.resolveBlockStyle(block)))
+      fragment.append(buildFallbackBlock(this.doc, block, this.resolveBlockStyle(block), blockIndex))
     })
 
     this.fallbackContent.append(fragment)
@@ -2010,11 +2142,25 @@ export class PretextImageEngine implements ImageTextEngine {
     this.statusBadge.textContent = 'Fallback layout active'
 
     if (this.scene.reveal.unit !== 'line') {
+      const blockCursors = new Map<string, number>()
       this.fallbackContent
         .querySelectorAll<HTMLElement>('.pie-fallback-block')
-        .forEach((el) =>
-          this.splitTextIntoUnits(el, this.scene.reveal.unit as Exclude<RevealUnit, 'line'>),
-        )
+        .forEach((el) => {
+          const blockId = el.dataset.blockId
+          const block = blockId
+            ? (this.scene.blocks.find((b) => !isEmbedBlock(b) && b.id === blockId) as
+                | TextBlockConfig
+                | undefined)
+            : undefined
+          const perLineLinks = block
+            ? perLineLinksForElement(el, block, blockCursors)
+            : undefined
+          this.splitTextIntoUnits(
+            el,
+            this.scene.reveal.unit as Exclude<RevealUnit, 'line'>,
+            perLineLinks,
+          )
+        })
       this.applyProgressProjection()
     }
 
