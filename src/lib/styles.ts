@@ -177,21 +177,22 @@ export const ENGINE_CSS = `
 }
 
 .pie-fallback-heading {
-  font: 600 clamp(1.3rem, 2vw, 1.9rem)/1.04 "Fraunces", Georgia, serif;
+  font: 300 clamp(1.3rem, 2vw, 2.1rem)/1.02 "Inter Tight", "Inter", system-ui, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 .pie-fallback-lede {
-  font: 600 1rem/1.6 "Source Serif 4", Georgia, serif;
+  font: 300 1rem/1.6 "Inter Tight", "Inter", system-ui, sans-serif;
   color: #3b4652;
 }
 
 .pie-fallback-body {
-  font: 400 1rem/1.7 "Source Serif 4", Georgia, serif;
+  font: 300 1rem/1.7 "Inter Tight", "Inter", system-ui, sans-serif;
   color: #3b4652;
 }
 
 .pie-fallback-caption {
-  font: italic 400 0.95rem/1.5 "Source Serif 4", Georgia, serif;
+  font: italic 300 0.95rem/1.5 "Inter Tight", "Inter", system-ui, sans-serif;
   color: #6e7884;
 }
 `
