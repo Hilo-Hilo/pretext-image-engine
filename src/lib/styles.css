@@ -87,15 +87,21 @@
 /* Embed containers. Hidden by default; `.pie-visible` is toggled atomically
  * by the engine once scroll reveal crosses the embed's threshold. Consumers
  * style the inner content (link cards, PDFs, iframes, custom widgets) via
- * their own `.pie-embed-<kind>` rules — the engine only owns position + fade. */
+ * their own `.pie-embed-<kind>` rules — the engine only owns position + fade.
+ *
+ * Note: pointer-events deliberately not forced here. Multi-layer consumers
+ * (like reel-template) stack multiple engines and need clicks to route only
+ * to the active layer. An auto default on pie-visible breaks that routing,
+ * so we inherit from the parent instead and let the consumer decide which
+ * layers are interactive.
+ */
 .pie-embed {
   opacity: 0;
   transition: opacity 220ms ease;
-  pointer-events: none;
+  pointer-events: inherit;
 }
 .pie-embed.pie-visible {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .pie-slot {
