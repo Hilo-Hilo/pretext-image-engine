@@ -279,10 +279,11 @@ const getFontMetrics = (
   )
   const lineHeightPx = Math.max(14, Math.round(fontSize * style.lineHeight))
 
+  const fontStyle = style.fontStyle ?? 'normal'
   return {
     fontSize,
     lineHeightPx,
-    font: `${style.fontWeight} ${fontSize}px ${style.fontFamily}`,
+    font: `${fontStyle} ${style.fontWeight} ${fontSize}px ${style.fontFamily}`,
   }
 }
 
@@ -707,7 +708,7 @@ const createLineElement = (
   element.style.left = `${Math.round(line.x)}px`
   element.style.top = `${Math.round(sticky ? line.scroll.stickyTop : line.y)}px`
   element.style.color = line.appearance.textColor
-  element.style.font = `${line.style.fontWeight} ${Math.round(line.fontSize)}px ${line.style.fontFamily}`
+  element.style.font = `${line.style.fontStyle ?? 'normal'} ${line.style.fontWeight} ${Math.round(line.fontSize)}px ${line.style.fontFamily}`
   element.style.lineHeight = `${line.lineHeightPx}px`
   element.style.letterSpacing = `${line.style.letterSpacing}px`
   element.style.textTransform = line.style.textTransform

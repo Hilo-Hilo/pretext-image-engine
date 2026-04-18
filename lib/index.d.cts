@@ -116,6 +116,11 @@ interface RegionConfig {
 interface BlockStyleConfig {
     fontFamily?: string;
     fontWeight?: number;
+    /**
+     * CSS font-style. Use `'italic'` for lede / caption / display text where
+     * editorial italic is semantically appropriate. Defaults to `'normal'`.
+     */
+    fontStyle?: 'normal' | 'italic';
     fontSizeRatio?: number;
     minFontSize?: number;
     maxFontSize?: number;

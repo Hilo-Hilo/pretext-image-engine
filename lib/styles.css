@@ -166,21 +166,21 @@
 }
 
 .pie-fallback-heading {
-  font: 300 clamp(1.3rem, 2vw, 2.1rem)/1.02 "Inter Tight", "Inter", system-ui, sans-serif;
-  letter-spacing: -0.02em;
+  font: 300 clamp(1.5rem, 2.4vw, 2.4rem)/1.04 "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  letter-spacing: -0.01em;
 }
 
 .pie-fallback-lede {
-  font: 300 1rem/1.6 "Inter Tight", "Inter", system-ui, sans-serif;
+  font: italic 400 1.1rem/1.4 "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
   color: #3b4652;
 }
 
 .pie-fallback-body {
-  font: 300 1rem/1.7 "Inter Tight", "Inter", system-ui, sans-serif;
+  font: 400 1.05rem/1.55 "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
   color: #3b4652;
 }
 
 .pie-fallback-caption {
-  font: italic 300 0.95rem/1.5 "Inter Tight", "Inter", system-ui, sans-serif;
+  font: italic 300 0.98rem/1.45 "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
   color: #6e7884;
 }
