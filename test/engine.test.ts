@@ -108,7 +108,7 @@ describe('PretextImageEngine', () => {
     expect(stage?.getAttribute('aria-label')).toBe('A skyline with text placed around the subject')
   })
 
-  it('uses the clamped font metrics when painting masked lines', async () => {
+  it('uses proportional font metrics when painting masked lines', async () => {
     const { container, engine, stage } = await mountEngine(
       createScene({
         blocks: [{ style: 'heading', text: 'Masked headline' }],
@@ -121,8 +121,90 @@ describe('PretextImageEngine', () => {
     const line = container.querySelector<HTMLElement>('.pie-line')
 
     expect(line).not.toBeNull()
-    expect(line?.style.font).toContain('44px')
-    expect(line?.style.lineHeight).toBe('47px')
+    expect(line?.style.font).toContain('80px')
+    expect(line?.style.lineHeight).toBe('82px')
+  })
+
+  it('falls back on masked layout overflow by default', async () => {
+    const { container, engine, stage } = await mountEngine(
+      createScene({
+        layout: {
+          fallbackBelowWidth: 100,
+          minScale: 1,
+        },
+        resize: {
+          preserveFullText: true,
+          fallbackMode: 'below',
+        },
+        blocks: [
+          {
+            id: 'long-copy',
+            style: 'body',
+            text: 'Overflow copy '.repeat(120),
+          },
+        ],
+      }),
+    )
+
+    setElementSize(stage, 320, 80)
+    engine.render()
+
+    expect(engine.state.layoutMode).toBe('fallback')
+    expect(container.querySelector<HTMLElement>('.pie-fallback')?.hidden).toBe(false)
+  })
+
+  it('keeps the best masked layout above the width fallback when overflow fallback is disabled', async () => {
+    const { container, engine, stage } = await mountEngine(
+      createScene({
+        layout: {
+          fallbackBelowWidth: 100,
+          minScale: 1,
+        },
+        resize: {
+          preserveFullText: true,
+          fallbackMode: 'below',
+          fallbackOnOverflow: false,
+        },
+        blocks: [
+          {
+            id: 'long-copy',
+            style: 'body',
+            text: 'Overflow copy '.repeat(120),
+          },
+        ],
+      }),
+    )
+
+    setElementSize(stage, 320, 80)
+    engine.render()
+
+    expect(engine.state.layoutMode).toBe('masked')
+    expect(container.querySelector<HTMLElement>('.pie-fallback')?.hidden).toBe(true)
+    expect(getMaskedLines(container).length).toBeGreaterThan(0)
+    expect(container.querySelector<HTMLElement>('.pie-status-badge')?.textContent).toBe(
+      'Text clipped inside the image at this size.',
+    )
+  })
+
+  it('uses width fallback before overflow policy', async () => {
+    const { container, engine, stage } = await mountEngine(
+      createScene({
+        layout: {
+          fallbackBelowWidth: 500,
+        },
+        resize: {
+          preserveFullText: true,
+          fallbackMode: 'below',
+          fallbackOnOverflow: false,
+        },
+      }),
+    )
+
+    setElementSize(stage, 320, 240)
+    engine.render()
+
+    expect(engine.state.layoutMode).toBe('fallback')
+    expect(container.querySelector<HTMLElement>('.pie-fallback')?.hidden).toBe(false)
   })
 
   it('keeps fallback disabled when fallbackMode is none', async () => {

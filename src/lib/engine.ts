@@ -817,10 +817,11 @@ const createLineElement = (
   element.style.boxShadow = line.appearance.backgroundColor
     ? `0 0 ${line.style.minFontSize}px ${line.appearance.backgroundColor}`
     : 'none'
-  element.style.textShadow =
+  const textShadow =
     line.appearance.shadowBlur > 0
       ? `${line.appearance.shadowOffsetX}px ${line.appearance.shadowOffsetY}px ${line.appearance.shadowBlur}px ${line.appearance.shadowColor}`
       : 'none'
+  element.style.textShadow = `var(--pie-line-text-shadow, ${textShadow})`
   element.style.userSelect = selectable && !sticky ? 'text' : 'none'
   element.dataset.blockId = line.blockId
   element.dataset.lineId = line.id
@@ -1071,6 +1072,7 @@ export class PretextImageEngine implements ImageTextEngine {
       preserveFullText: this.scene.resize.preserveFullText,
       fallbackMode: this.scene.resize.fallbackMode,
       fallbackBelowWidth: this.scene.layout.fallbackBelowWidth,
+      fallbackOnOverflow: this.scene.resize.fallbackOnOverflow,
       v2Enabled: Boolean(this.scene.v2?.enabled),
     }
 
@@ -1101,13 +1103,10 @@ export class PretextImageEngine implements ImageTextEngine {
       this.applyProtectionMask(v2Plan.protectionRects)
     }
 
-    const allowFallback = this.scene.resize.fallbackMode === 'below'
+    const canFallback =
+      this.scene.resize.preserveFullText && this.scene.resize.fallbackMode === 'below'
 
-    if (
-      this.scene.resize.preserveFullText &&
-      allowFallback &&
-      width <= this.scene.layout.fallbackBelowWidth
-    ) {
+    if (canFallback && width <= this.scene.layout.fallbackBelowWidth) {
       runtimeDebug.__pieLastRender = {
         ...(runtimeDebug.__pieLastRender ?? {}),
         reason: 'fallback-below-width',
@@ -1141,7 +1140,7 @@ export class PretextImageEngine implements ImageTextEngine {
       }
     }
 
-    if (this.scene.resize.preserveFullText && allowFallback) {
+    if (canFallback && this.scene.resize.fallbackOnOverflow) {
       runtimeDebug.__pieLastRender = {
         ...(runtimeDebug.__pieLastRender ?? {}),
         reason: 'fallback-after-measurement',
@@ -1157,12 +1156,13 @@ export class PretextImageEngine implements ImageTextEngine {
         reason: 'applied-partial-layout',
         renderedLines: bestPartial.renderedLines,
         overflowed: bestPartial.overflowed,
+        fallbackOnOverflow: this.scene.resize.fallbackOnOverflow,
       }
       this.applyMasked(bestPartial, bestPartial.statusText ?? 'Text clipped inside the image at this size.')
       return
     }
 
-    if (allowFallback) {
+    if (canFallback) {
       runtimeDebug.__pieLastRender = {
         ...(runtimeDebug.__pieLastRender ?? {}),
         reason: 'fallback-no-readable-slots',

@@ -44,6 +44,7 @@ interface ResizeConfig {
     preserveFullText?: boolean;
     fallbackMode?: FallbackMode;
     fallbackLabel?: string;
+    fallbackOnOverflow?: boolean;
 }
 interface TextColorConfig {
     mode?: TextColorMode;

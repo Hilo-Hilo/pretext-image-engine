@@ -41,6 +41,7 @@ export function createScene(
       preserveFullText: true,
       fallbackMode: 'below',
       fallbackLabel: '',
+      fallbackOnOverflow: true,
     },
     interaction: {
       selectable: true,

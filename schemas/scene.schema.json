@@ -63,7 +63,8 @@
           "type": "string",
           "enum": ["below", "none"]
         },
-        "fallbackLabel": { "type": "string" }
+        "fallbackLabel": { "type": "string" },
+        "fallbackOnOverflow": { "type": "boolean" }
       }
     },
     "colors": {

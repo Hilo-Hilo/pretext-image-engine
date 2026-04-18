@@ -35,6 +35,7 @@ export const DEFAULT_RESIZE: Required<ResizeConfig> = {
   preserveFullText: true,
   fallbackMode: 'below',
   fallbackLabel: 'Full text moved below the image at this size.',
+  fallbackOnOverflow: true,
 }
 
 export const DEFAULT_HIGHLIGHT: Required<HighlightConfig> = {

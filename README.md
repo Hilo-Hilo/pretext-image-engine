@@ -240,9 +240,10 @@ If your mask has several transparent openings, define named regions and assign b
 
 When `resize.preserveFullText` is `true`, the engine tries this sequence:
 
-1. Masked in-image layout
-2. Smaller scale values down to `layout.minScale`
-3. Fallback below the image if the scene still cannot fit
+1. Fallback below the image when width is at or below `layout.fallbackBelowWidth`
+2. Masked in-image layout
+3. Smaller scale values down to `layout.minScale`
+4. Fallback below the image if the scene still cannot fit and `resize.fallbackOnOverflow` is not `false`
 
 When `resize.preserveFullText` is `false`, the engine keeps the text inside the image and allows clipping instead of falling back.
 
