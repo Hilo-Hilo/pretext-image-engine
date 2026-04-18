@@ -73,6 +73,31 @@
   max-width: max-content;
 }
 
+.pie-char,
+.pie-word {
+  opacity: 0;
+  transition: opacity 60ms linear;
+}
+
+.pie-char.pie-visible,
+.pie-word.pie-visible {
+  opacity: 1;
+}
+
+/* Embed containers. Hidden by default; `.pie-visible` is toggled atomically
+ * by the engine once scroll reveal crosses the embed's threshold. Consumers
+ * style the inner content (link cards, PDFs, iframes, custom widgets) via
+ * their own `.pie-embed-<kind>` rules — the engine only owns position + fade. */
+.pie-embed {
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+}
+.pie-embed.pie-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .pie-slot {
   position: absolute;
   border: 1px dashed rgba(94, 237, 211, 0.85);

@@ -1,10 +1,14 @@
 export { createPretextImageEngine, PretextImageEngine } from './engine'
+export { createScene, composeScene } from './scene'
+export type { CreateSceneInput, PerImageScene } from './scene'
 export type {
+  BlockConfig,
   BlockStyleConfig,
   ColorConfig,
   ColumnSplitConfig,
   CSSColorValue,
   DebugConfig,
+  EmbedBlockConfig,
   EngineOptions,
   EngineState,
   HighlightConfig,
@@ -14,6 +18,9 @@ export type {
   LayoutConfig,
   RegionConfig,
   ResizeConfig,
+  RevealConfig,
+  RevealUnit,
+  ScrollSourceOptions,
   SceneAssetConfig,
   SceneMeta,
   StageConfig,

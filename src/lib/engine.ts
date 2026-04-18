@@ -8,6 +8,7 @@ import {
   DEFAULT_INTERACTION,
   DEFAULT_LAYOUT,
   DEFAULT_RESIZE,
+  DEFAULT_REVEAL,
   DEFAULT_SCENE,
   DEFAULT_SHADOW,
   DEFAULT_STAGE,
@@ -15,9 +16,11 @@ import {
 import { ENGINE_CSS, ENGINE_STYLE_ID } from './styles'
 import { buildV2Plan, resolveV2BlockBackdrop, resolveV2PanelColor, type PlannedV2Slot } from './v2'
 import type {
+  BlockConfig,
   BlockStyleConfig,
   ColumnSplitConfig,
   ColorConfig,
+  EmbedBlockConfig,
   EngineOptions,
   EngineState,
   HighlightConfig,
@@ -26,12 +29,22 @@ import type {
   InteractionConfig,
   LineAppearance,
   RegionConfig,
+  RevealConfig,
+  RevealUnit,
+  ScrollSourceOptions,
   SelectionConfig,
   ShadowConfig,
   TextBlockConfig,
   TextBlockScrollConfig,
   TextBlockScrollMode,
 } from './types'
+
+const isTextBlock = (block: BlockConfig): block is TextBlockConfig =>
+  block.kind !== 'embed'
+const isEmbedBlock = (block: BlockConfig): block is EmbedBlockConfig =>
+  block.kind === 'embed'
+const DEFAULT_EMBED_REVEAL_COST = 20
+const DEFAULT_EMBED_GAP_AFTER = 14
 
 type ResolvedBlockStyle = Omit<Required<BlockStyleConfig>, 'highlight' | 'columns'> & {
   highlight: Required<HighlightConfig>
@@ -54,7 +67,8 @@ type ResolvedStage = Required<NonNullable<ImageEngineSceneConfig['stage']>>
 type ResolvedLayout = Required<NonNullable<ImageEngineSceneConfig['layout']>>
 type ResolvedResize = Required<NonNullable<ImageEngineSceneConfig['resize']>>
 type ResolvedDebug = Required<NonNullable<ImageEngineSceneConfig['debug']>>
-type ResolvedOptions = Required<EngineOptions>
+type ResolvedOptions = Required<Pick<EngineOptions, 'injectStyles' | 'initialProgress'>> &
+  Pick<EngineOptions, 'renderEmbed'>
 type ResolvedColors = {
   text: Required<NonNullable<ColorConfig['text']>>
   highlight: Required<HighlightConfig>
@@ -71,10 +85,11 @@ type ResolvedScene = {
   colors: ResolvedColors
   columnSplit: Required<ColumnSplitConfig>
   interaction: Required<InteractionConfig>
+  reveal: Required<RevealConfig>
   debug: ResolvedDebug
   styles: Record<string, ResolvedBlockStyle>
   regions: Record<string, ResolvedRegion>
-  blocks: TextBlockConfig[]
+  blocks: BlockConfig[]
   v2: ImageEngineSceneConfig['v2']
 }
 
@@ -112,8 +127,22 @@ type LayoutBlock = {
   slotId: string | null
 }
 
+type LayoutEmbed = {
+  id: string
+  blockId: string
+  blockIndex: number
+  config: EmbedBlockConfig
+  x: number
+  y: number
+  width: number
+  height: number
+  slotId: string | null
+  revealCost: number
+}
+
 type MaskedLayoutResult = {
   lines: LayoutLine[]
+  embeds: LayoutEmbed[]
   blocks: LayoutBlock[]
   debugSlots: Array<{
     x: number
@@ -176,12 +205,14 @@ const mergeStyle = (base: ResolvedBlockStyle, patch?: BlockStyleConfig): Resolve
 
 const resolveStyles = (
   styleOverrides: Record<string, BlockStyleConfig> | undefined,
-  blocks: TextBlockConfig[],
+  blocks: BlockConfig[],
 ): Record<string, ResolvedBlockStyle> => {
   const styles: Record<string, ResolvedBlockStyle> = {}
   const keys = new Set<string>([...Object.keys(DEFAULT_BLOCK_STYLES), ...Object.keys(styleOverrides ?? {})])
 
-  blocks.forEach((block) => keys.add(block.style))
+  blocks.forEach((block) => {
+    if (isTextBlock(block)) keys.add(block.style)
+  })
 
   keys.forEach((key) => {
     const base = (DEFAULT_BLOCK_STYLES[key] ?? DEFAULT_BLOCK_STYLES.body) as ResolvedBlockStyle
@@ -271,7 +302,49 @@ const resolveScrollConfig = (scroll?: TextBlockScrollConfig): ResolvedBlockScrol
 const resolveOptions = (options?: EngineOptions): ResolvedOptions => ({
   injectStyles: options?.injectStyles ?? true,
   initialProgress: clampProgress(numberOr(options?.initialProgress, 0)),
+  renderEmbed: options?.renderEmbed,
 })
+
+const DEFAULT_ITEM_GAP = 4
+
+const expandBlocks = (blocks: BlockConfig[]): BlockConfig[] => {
+  const result: BlockConfig[] = []
+  blocks.forEach((block, blockIndex) => {
+    if (isEmbedBlock(block)) {
+      // Embeds pass through unchanged; no text to expand.
+      result.push(block)
+      return
+    }
+    if (Array.isArray(block.lines) && block.lines.length > 0) {
+      const marker = block.marker ?? ''
+      const baseId = block.id ?? `block-${blockIndex}`
+      const itemGap = block.itemGap ?? DEFAULT_ITEM_GAP
+      const lastIndex = block.lines.length - 1
+      block.lines.forEach((lineText, lineIndex) => {
+        const { lines: _lines, marker: _marker, text: _text, itemGap: _ig, styleOverride, ...rest } = block
+        const isLast = lineIndex === lastIndex
+        const mergedOverride = isLast
+          ? styleOverride
+          : { ...(styleOverride ?? {}), gapAfter: styleOverride?.gapAfter ?? itemGap }
+        result.push({
+          ...rest,
+          id: `${baseId}-item-${lineIndex}`,
+          text: `${marker}${lineText}`,
+          ...(mergedOverride ? { styleOverride: mergedOverride } : {}),
+        })
+      })
+      return
+    }
+    if (typeof block.text === 'string') {
+      result.push(block)
+      return
+    }
+    console.warn(
+      `[pretext-image-engine] block ${block.id ?? blockIndex} has neither text nor lines; skipping.`,
+    )
+  })
+  return result
+}
 
 const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
   const mergedColors: ResolvedColors = {
@@ -291,6 +364,10 @@ const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
   const resolvedInteraction: Required<InteractionConfig> = {
     ...DEFAULT_INTERACTION,
     ...objectOrEmpty(scene.interaction),
+  }
+  const resolvedReveal: Required<RevealConfig> = {
+    ...DEFAULT_REVEAL,
+    ...objectOrEmpty(scene.reveal),
   }
   const resolvedDebug: ResolvedDebug = {
     enabled: false,
@@ -314,10 +391,11 @@ const resolveScene = (scene: ImageEngineSceneConfig): ResolvedScene => {
     colors: mergedColors,
     columnSplit: resolvedColumnSplit,
     interaction: resolvedInteraction,
+    reveal: resolvedReveal,
     debug: resolvedDebug,
     styles: resolveStyles(scene.styles, scene.blocks),
     regions: resolveRegions(scene.regions),
-    blocks: scene.blocks,
+    blocks: expandBlocks(scene.blocks),
     v2: scene.v2,
   }
 }
@@ -427,7 +505,7 @@ const waitForImage = async (image: HTMLImageElement): Promise<void> => {
       }
 
       fail()
-    }, 5000)
+    }, 60_000)
 
     if (typeof image.decode === 'function') {
       void image.decode().then(finish).catch(() => {
@@ -576,8 +654,8 @@ const buildFallbackBlock = (
   const tag = block.style === 'heading' ? 'h3' : 'p'
   const element = doc.createElement(tag)
   element.className = `pie-fallback-block pie-fallback-${sanitizeStyleName(block.style)}`
-  element.textContent =
-    style.textTransform === 'uppercase' ? block.text.toUpperCase() : block.text
+  const rawText = block.text ?? ''
+  element.textContent = style.textTransform === 'uppercase' ? rawText.toUpperCase() : rawText
   return element
 }
 
@@ -719,8 +797,11 @@ export class PretextImageEngine implements ImageTextEngine {
   private scene: ResolvedScene
   private imageSignature = ''
   private pendingFrame = 0
+  private resizeDebounce = 0
   private activeLayout: MaskedLayoutResult | null = null
   private readonly lineElements = new Map<string, HTMLDivElement>()
+  private readonly renderListeners = new Set<() => void>()
+  private peakProgress = 0
   readonly ready: Promise<void>
   state: EngineState
 
@@ -731,12 +812,14 @@ export class PretextImageEngine implements ImageTextEngine {
 
     this.container = container
     this.scene = resolveScene(scene)
+    const initial = clampProgress(this.options.initialProgress)
+    this.peakProgress = initial
     this.state = {
       layoutMode: 'masked',
       width: 0,
       height: 0,
       scale: 1,
-      progress: this.options.initialProgress,
+      progress: initial,
     }
 
     this.root = this.doc.createElement('div')
@@ -804,10 +887,64 @@ export class PretextImageEngine implements ImageTextEngine {
   }
 
   setProgress(progress: number): void {
-    this.state.progress = clampProgress(progress)
+    const clamped = clampProgress(progress)
+    const effective = this.scene.reveal.monotonic
+      ? Math.max(this.peakProgress, clamped)
+      : clamped
+    this.peakProgress = effective
+    this.state.progress = effective
 
-    if (this.state.layoutMode === 'masked' && this.activeLayout) {
-      this.applyProgressProjection()
+    this.applyProgressProjection()
+  }
+
+  onRender(listener: () => void): () => void {
+    this.renderListeners.add(listener)
+    return () => {
+      this.renderListeners.delete(listener)
+    }
+  }
+
+  attachScrollSource(
+    target: Window | HTMLElement = this.doc.defaultView ?? window,
+    options: ScrollSourceOptions = {},
+  ): () => void {
+    const throttle = options.throttle ?? 'raf'
+    const easing = options.easing ?? ((t: number) => t)
+    let rafId = 0
+    let frameQueued = false
+
+    const read = (): number => {
+      if (target === this.doc.defaultView || target === window) {
+        const scroller = this.doc.scrollingElement ?? this.doc.documentElement
+        const total = scroller.scrollHeight - (this.doc.defaultView?.innerHeight ?? window.innerHeight)
+        return total > 0 ? clampProgress(scroller.scrollTop / total) : 0
+      }
+      const el = target as HTMLElement
+      const total = el.scrollHeight - el.clientHeight
+      return total > 0 ? clampProgress(el.scrollTop / total) : 0
+    }
+
+    const tick = () => {
+      frameQueued = false
+      this.setProgress(easing(read()))
+    }
+
+    const onScroll = () => {
+      if (throttle === 'none') {
+        tick()
+        return
+      }
+      if (frameQueued) return
+      frameQueued = true
+      rafId = requestAnimationFrame(tick)
+    }
+
+    target.addEventListener('scroll', onScroll, { passive: true })
+    tick()
+
+    return () => {
+      target.removeEventListener('scroll', onScroll)
+      if (rafId) cancelAnimationFrame(rafId)
     }
   }
 
@@ -941,6 +1078,7 @@ export class PretextImageEngine implements ImageTextEngine {
     this.applyMasked(
       {
         lines: [],
+        embeds: [],
         blocks: [],
         debugSlots: v2Plan?.debugRects.map((rect) => ({
           x: rect.x,
@@ -964,22 +1102,30 @@ export class PretextImageEngine implements ImageTextEngine {
     if (this.pendingFrame) {
       cancelAnimationFrame(this.pendingFrame)
     }
+    if (this.resizeDebounce) {
+      clearTimeout(this.resizeDebounce)
+      this.resizeDebounce = 0
+    }
 
     this.resizeObserver?.disconnect()
+    this.renderListeners.clear()
     this.container.replaceChildren()
   }
 
   private attachResizeObserver(): void {
     if ('ResizeObserver' in window) {
+      let firstFire = true
       this.resizeObserver = new ResizeObserver(() => {
-        if (this.pendingFrame) {
-          cancelAnimationFrame(this.pendingFrame)
-        }
-
-        this.pendingFrame = requestAnimationFrame(() => {
-          this.pendingFrame = 0
+        if (firstFire) {
+          firstFire = false
           this.render()
-        })
+          return
+        }
+        if (this.resizeDebounce) clearTimeout(this.resizeDebounce)
+        this.resizeDebounce = window.setTimeout(() => {
+          this.resizeDebounce = 0
+          this.render()
+        }, 120)
       })
       this.resizeObserver.observe(this.stage)
     }
@@ -1271,11 +1417,12 @@ export class PretextImageEngine implements ImageTextEngine {
     width: number,
     height: number,
     scale: number,
-    blockSource: TextBlockConfig[] = this.scene.blocks,
+    blockSource: BlockConfig[] = this.scene.blocks,
     regionSource?: Record<string, RegionConfig>,
     plannedSlots?: PlannedV2Slot[],
   ): MaskedLayoutResult {
     const lines: LayoutLine[] = []
+    const embeds: LayoutEmbed[] = []
     const blocks: LayoutBlock[] = []
     const debugSlots: MaskedLayoutResult['debugSlots'] = []
     const resolvedRegions = regionSource ? resolveRegions(regionSource) : this.scene.regions
@@ -1298,9 +1445,106 @@ export class PretextImageEngine implements ImageTextEngine {
 
     for (const [blockIndex, block] of blockSource.entries()) {
       const blockId = block.id ?? `block-${blockIndex}`
+
+      // --- Embed branch -------------------------------------------------
+      // Embeds don't go through pretext text layout. We just reserve a
+      // `width × height` rectangle in the target region, emit a LayoutEmbed,
+      // and advance the region's cursor so subsequent blocks stack below.
+      if (isEmbedBlock(block)) {
+        const region = block.region ? resolvedRegions[block.region] ?? null : null
+        const regionTop = region
+          ? Math.max(this.scene.layout.outerPadding, Math.round(region.yStart * height))
+          : this.scene.layout.outerPadding
+        const regionBottom = region
+          ? Math.min(height - this.scene.layout.outerPadding, Math.round(region.yEnd * height))
+          : height - this.scene.layout.outerPadding
+
+        let cursorTop = region
+          ? regionCursors.get(block.region!) ?? regionTop
+          : globalCursor
+
+        const embedWidth = Math.max(1, Math.round(block.width * scale))
+        const embedHeight = Math.max(1, Math.round(block.height * scale))
+        const gapAfter = Math.max(0, block.gapAfter ?? DEFAULT_EMBED_GAP_AFTER)
+
+        // Horizontal placement within the region: use the region's anchorX as
+        // the center bias, same heuristic as text (but no slot carving since
+        // embeds are opaque blocks that don't flow around mask geometry).
+        const regionLeft = region
+          ? Math.max(this.scene.layout.outerPadding, Math.round(region.xStart * width))
+          : this.scene.layout.outerPadding
+        const regionRight = region
+          ? Math.min(width - this.scene.layout.outerPadding, Math.round(region.xEnd * width))
+          : width - this.scene.layout.outerPadding
+        const anchor = region ? region.anchorX : 0.5
+        const usableWidth = Math.max(1, regionRight - regionLeft)
+        const effectiveWidth = Math.min(embedWidth, usableWidth)
+        const desiredCenter = regionLeft + anchor * usableWidth
+        let embedX = Math.round(desiredCenter - effectiveWidth / 2)
+        if (embedX < regionLeft) embedX = regionLeft
+        if (embedX + effectiveWidth > regionRight) embedX = regionRight - effectiveWidth
+
+        // Overflow check uses the FULL declared height (not a clamped value).
+        // If the embed would extend past the region's bottom, signal overflow
+        // so the engine tries the next smaller scale candidate — same
+        // contract text blocks use. Silent truncation here produced clipped
+        // cards at awkward zoom levels.
+        if (cursorTop + embedHeight > regionBottom) {
+          blocks.push({
+            id: blockId,
+            blockIndex,
+            scroll: resolveScrollConfig(undefined),
+            firstLineId: null,
+            slotId: block.region ?? null,
+          })
+          return {
+            lines,
+            embeds,
+            blocks,
+            debugSlots,
+            overflowed: true,
+            renderedLines: lines.length,
+            scale,
+            statusText: plannedSlots?.length
+              ? `V2 auto layout active · ${plannedSlots.filter((slot) => slot.active).length} slot${plannedSlots.filter((slot) => slot.active).length === 1 ? '' : 's'} planned`
+              : undefined,
+          }
+        }
+
+        embeds.push({
+          id: blockId,
+          blockId,
+          blockIndex,
+          config: block,
+          x: embedX,
+          y: cursorTop,
+          width: effectiveWidth,
+          height: embedHeight,
+          slotId: block.region ?? null,
+          revealCost: Math.max(1, Math.round(block.revealCost ?? DEFAULT_EMBED_REVEAL_COST)),
+        })
+        blocks.push({
+          id: blockId,
+          blockIndex,
+          scroll: resolveScrollConfig(undefined),
+          firstLineId: null,
+          slotId: block.region ?? null,
+        })
+
+        cursorTop += embedHeight + gapAfter
+        if (region && block.region) {
+          regionCursors.set(block.region, cursorTop)
+        } else {
+          globalCursor = cursorTop
+        }
+        continue
+      }
+      // --- End embed branch ---------------------------------------------
+
       const style = this.resolveBlockStyle(block)
+      const rawBlockText = block.text ?? ''
       const text =
-        style.textTransform === 'uppercase' ? block.text.toUpperCase() : block.text
+        style.textTransform === 'uppercase' ? rawBlockText.toUpperCase() : rawBlockText
       const { font, fontSize, lineHeightPx } = getFontMetrics(style, width, scale)
       const prepared = prepareWithSegments(text, font)
       const region = block.region ? resolvedRegions[block.region] ?? null : null
@@ -1420,6 +1664,7 @@ export class PretextImageEngine implements ImageTextEngine {
       if (!blockFinished) {
         return {
           lines,
+          embeds,
           blocks,
           debugSlots,
           overflowed: true,
@@ -1432,12 +1677,40 @@ export class PretextImageEngine implements ImageTextEngine {
 
     return {
       lines,
+      embeds,
       blocks,
       debugSlots,
       overflowed: false,
       renderedLines: lines.length,
       scale,
       statusText: plannedSlots?.length ? `V2 auto layout active · ${plannedSlots.filter((slot) => slot.active).length} slot${plannedSlots.filter((slot) => slot.active).length === 1 ? '' : 's'} planned` : undefined,
+    }
+  }
+
+  private maybeAccumulatePanel(
+    line: LayoutLine,
+    panelGroups: Map<string, { x: number; y: number; right: number; bottom: number; color: string }>,
+  ): void {
+    if (line.backdropMode !== 'panel' || !line.panelColor) return
+    const key = line.slotId ?? line.blockId
+    const current = panelGroups.get(key)
+    const paddedLeft = Math.max(0, line.x - Math.max(8, line.appearance.paddingX * 2))
+    const paddedTop = Math.max(0, line.y - Math.max(6, line.appearance.paddingY * 2))
+    const paddedRight = line.x + line.width + Math.max(8, line.appearance.paddingX * 2)
+    const paddedBottom = line.y + line.lineHeightPx + Math.max(6, line.appearance.paddingY * 2)
+    if (current) {
+      current.x = Math.min(current.x, paddedLeft)
+      current.y = Math.min(current.y, paddedTop)
+      current.right = Math.max(current.right, paddedRight)
+      current.bottom = Math.max(current.bottom, paddedBottom)
+    } else {
+      panelGroups.set(key, {
+        x: paddedLeft,
+        y: paddedTop,
+        right: paddedRight,
+        bottom: paddedBottom,
+        color: line.panelColor,
+      })
     }
   }
 
@@ -1456,36 +1729,48 @@ export class PretextImageEngine implements ImageTextEngine {
     const panelFragment = this.doc.createDocumentFragment()
     const panelGroups = new Map<string, { x: number; y: number; right: number; bottom: number; color: string }>()
 
-    result.lines.forEach((line) => {
+    // Walk text lines and embeds together in scene-block order so DOM order
+    // reflects authoring order. Unit-level progress projection depends on
+    // this because it toggles `.pie-visible` by document-order iteration.
+    let __lineIdx = 0
+    let __embedIdx = 0
+    const __appendNextLine = () => {
+      const line = result.lines[__lineIdx++]!
       const element = createLineElement(this.doc, line, this.scene.interaction.selectable)
       this.lineElements.set(line.id, element)
       lineFragment.append(element)
-
-      if (line.backdropMode === 'panel' && line.panelColor) {
-        const key = line.slotId ?? line.blockId
-        const current = panelGroups.get(key)
-        const paddedLeft = Math.max(0, line.x - Math.max(8, line.appearance.paddingX * 2))
-        const paddedTop = Math.max(0, line.y - Math.max(6, line.appearance.paddingY * 2))
-        const paddedRight = line.x + line.width + Math.max(8, line.appearance.paddingX * 2)
-        const paddedBottom = line.y + line.lineHeightPx + Math.max(6, line.appearance.paddingY * 2)
-
-        if (current) {
-          current.x = Math.min(current.x, paddedLeft)
-          current.y = Math.min(current.y, paddedTop)
-          current.right = Math.max(current.right, paddedRight)
-          current.bottom = Math.max(current.bottom, paddedBottom)
-        } else {
-          panelGroups.set(key, {
-            x: paddedLeft,
-            y: paddedTop,
-            right: paddedRight,
-            bottom: paddedBottom,
-            color: line.panelColor,
-          })
+      this.maybeAccumulatePanel(line, panelGroups)
+    }
+    const __appendNextEmbed = () => {
+      const embed = result.embeds[__embedIdx++]!
+      const container = this.doc.createElement('div')
+      container.className = `pie-embed pie-embed-${sanitizeStyleName(embed.config.embedKind)}`
+      container.dataset.embedId = embed.id
+      container.dataset.embedKind = embed.config.embedKind
+      container.dataset.revealCost = String(embed.revealCost)
+      container.style.position = 'absolute'
+      container.style.left = `${embed.x}px`
+      container.style.top = `${embed.y}px`
+      container.style.width = `${embed.width}px`
+      container.style.height = `${embed.height}px`
+      if (this.scene.interaction.selectable) {
+        container.style.userSelect = 'text'
+      }
+      if (this.options.renderEmbed) {
+        try {
+          this.options.renderEmbed(embed.config, container)
+        } catch (err) {
+          console.error('[pretext-image-engine] renderEmbed threw:', err)
         }
       }
-    })
-
+      lineFragment.append(container)
+    }
+    while (__lineIdx < result.lines.length || __embedIdx < result.embeds.length) {
+      const nextLineBI = result.lines[__lineIdx]?.blockIndex ?? Infinity
+      const nextEmbedBI = result.embeds[__embedIdx]?.blockIndex ?? Infinity
+      if (nextLineBI <= nextEmbedBI) __appendNextLine()
+      else __appendNextEmbed()
+    }
     panelGroups.forEach((panel, key) => {
       panelFragment.append(
         createPanelElement(this.doc, {
@@ -1550,11 +1835,26 @@ export class PretextImageEngine implements ImageTextEngine {
 
     this.fallback.hidden = true
     this.statusBadge.textContent = result.statusText ?? statusText
+
+    if (this.scene.reveal.unit !== 'line') {
+      this.lineElements.forEach((el) => {
+        this.splitTextIntoUnits(el, this.scene.reveal.unit as Exclude<RevealUnit, 'line'>)
+      })
+    }
+
     this.applyProgressProjection()
+    this.emitRender()
   }
 
   private applyProgressProjection(): void {
-    if (!this.activeLayout) {
+    const unit = this.scene.reveal.unit
+
+    if (unit !== 'line') {
+      this.applyUnitLevelProjection()
+      return
+    }
+
+    if (this.state.layoutMode !== 'masked' || !this.activeLayout) {
       this.stickyInner.replaceChildren()
       return
     }
@@ -1588,6 +1888,83 @@ export class PretextImageEngine implements ImageTextEngine {
     }
   }
 
+  private applyUnitLevelProjection(): void {
+    this.stickyInner.replaceChildren()
+    // Collect every revealable unit in DOM order. Text chars/words count as
+    // one slot each; embeds count as `revealCost` slots (default 20) so they
+    // get meaningful scroll runway around them — but display atomically:
+    // a single `.pie-visible` toggle either shows the whole embed or hides it.
+    const units: Array<{ el: HTMLElement; slots: number; atomic: boolean }> = []
+    const pushFrom = (root: HTMLElement): void => {
+      root
+        .querySelectorAll<HTMLElement>('.pie-char, .pie-word, .pie-embed')
+        .forEach((el) => {
+          if (el.classList.contains('pie-embed')) {
+            const cost = Number(el.dataset.revealCost)
+            units.push({
+              el,
+              slots: Number.isFinite(cost) && cost > 0 ? cost : DEFAULT_EMBED_REVEAL_COST,
+              atomic: true,
+            })
+          } else {
+            units.push({ el, slots: 1, atomic: false })
+          }
+        })
+    }
+    pushFrom(this.lineLayer)
+    pushFrom(this.fallbackContent)
+
+    if (units.length === 0) return
+
+    const totalSlots = units.reduce((sum, u) => sum + u.slots, 0)
+    const target = Math.floor(this.state.progress * totalSlots)
+    let cumulative = 0
+    for (const unit of units) {
+      // Unit becomes visible once the target slot has advanced past its start.
+      // Atomic units (embeds) flip all-or-nothing at the same threshold, which
+      // then drives a CSS opacity transition for the fade-in.
+      const visible = cumulative < target
+      if (visible) {
+        if (!unit.el.classList.contains('pie-visible')) unit.el.classList.add('pie-visible')
+      } else {
+        if (unit.el.classList.contains('pie-visible')) unit.el.classList.remove('pie-visible')
+      }
+      cumulative += unit.slots
+    }
+  }
+
+  private splitTextIntoUnits(el: HTMLElement, unit: Exclude<RevealUnit, 'line'>): void {
+    const text = el.textContent ?? ''
+    if (!text) return
+    el.textContent = ''
+    const className = unit === 'char' ? 'pie-char' : 'pie-word'
+    const tokens =
+      unit === 'char'
+        ? [...text]
+        : (text.match(/\s+|\S+/g) ?? [])
+    for (const token of tokens) {
+      if (unit === 'word' && /^\s+$/.test(token)) {
+        el.appendChild(this.doc.createTextNode(token))
+        continue
+      }
+      const span = this.doc.createElement('span')
+      span.className = className
+      span.textContent = token
+      el.appendChild(span)
+    }
+  }
+
+  private emitRender(): void {
+    this.root.dataset.revealUnit = this.scene.reveal.unit
+    this.renderListeners.forEach((cb) => {
+      try {
+        cb()
+      } catch (err) {
+        console.error('[pretext-image-engine] onRender listener threw:', err)
+      }
+    })
+  }
+
   private applyFallback(label: string): void {
     this.state.layoutMode = 'fallback'
     this.state.scale = 1
@@ -1601,7 +1978,28 @@ export class PretextImageEngine implements ImageTextEngine {
 
     const fragment = this.doc.createDocumentFragment()
 
-    this.scene.blocks.forEach((block) => {
+    this.scene.blocks.forEach((block, blockIndex) => {
+      if (isEmbedBlock(block)) {
+        // In fallback mode the embed flows in document order — no absolute
+        // positioning, no aspect ratio preservation beyond CSS. We give the
+        // factory a container and let it populate.
+        const container = this.doc.createElement('div')
+        container.className = `pie-embed pie-embed-${sanitizeStyleName(block.embedKind)} pie-embed-fallback`
+        container.dataset.embedId = block.id ?? `block-${blockIndex}`
+        container.dataset.embedKind = block.embedKind
+        container.dataset.revealCost = String(
+          Math.max(1, Math.round(block.revealCost ?? DEFAULT_EMBED_REVEAL_COST)),
+        )
+        if (this.options?.renderEmbed) {
+          try {
+            this.options.renderEmbed(block, container)
+          } catch (err) {
+            console.error('[pretext-image-engine] renderEmbed threw:', err)
+          }
+        }
+        fragment.append(container)
+        return
+      }
       fragment.append(buildFallbackBlock(this.doc, block, this.resolveBlockStyle(block)))
     })
 
@@ -1609,6 +2007,17 @@ export class PretextImageEngine implements ImageTextEngine {
     this.fallbackLabel.textContent = label
     this.fallback.hidden = false
     this.statusBadge.textContent = 'Fallback layout active'
+
+    if (this.scene.reveal.unit !== 'line') {
+      this.fallbackContent
+        .querySelectorAll<HTMLElement>('.pie-fallback-block')
+        .forEach((el) =>
+          this.splitTextIntoUnits(el, this.scene.reveal.unit as Exclude<RevealUnit, 'line'>),
+        )
+      this.applyProgressProjection()
+    }
+
+    this.emitRender()
   }
 }
 

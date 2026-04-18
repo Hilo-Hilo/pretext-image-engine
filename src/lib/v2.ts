@@ -1,4 +1,5 @@
 import type {
+  BlockConfig,
   ImageEngineSceneConfig,
   RegionConfig,
   TextBlockConfig,
@@ -6,6 +7,9 @@ import type {
   V2SubjectZoneConfig,
   V2TextRole,
 } from './types'
+
+const isTextBlock = (block: BlockConfig): block is TextBlockConfig =>
+  block.kind !== 'embed'
 
 type CellStats = {
   col: number
@@ -54,7 +58,7 @@ export type PlannedV2Slot = PixelRect & {
 }
 
 export type V2Plan = {
-  blocks: TextBlockConfig[]
+  blocks: BlockConfig[]
   regions: Record<string, RegionConfig>
   slots: PlannedV2Slot[]
   debugRects: V2DebugRect[]
@@ -559,12 +563,19 @@ const assignBlocksToSlots = (scene: ImageEngineSceneConfig, slots: PlannedV2Slot
   }
 
   const usage = new Map<string, number>()
-  const sortedBlocks = scene.blocks.map((block, blockIndex) => ({
-    block,
-    blockIndex,
-    priority: numberOr(block.v2?.priority, rolePriority(block)),
-    role: block.v2?.role ?? resolveRoleFromStyle(block.style),
-  }))
+  // v2 auto-layout only reasons about text blocks — embeds are opaque to it
+  // and flow through assignment unchanged with whatever `region` the author
+  // set explicitly in the scene JSON.
+  const sortedBlocks = scene.blocks
+    .map((block, blockIndex) => ({ block, blockIndex }))
+    .filter((entry): entry is { block: TextBlockConfig; blockIndex: number } =>
+      isTextBlock(entry.block),
+    )
+    .map((entry) => ({
+      ...entry,
+      priority: numberOr(entry.block.v2?.priority, rolePriority(entry.block)),
+      role: entry.block.v2?.role ?? resolveRoleFromStyle(entry.block.style),
+    }))
   sortedBlocks.sort((left, right) => left.priority - right.priority || left.blockIndex - right.blockIndex)
 
   const assignments = new Map<number, string>()
@@ -596,13 +607,16 @@ const assignBlocksToSlots = (scene: ImageEngineSceneConfig, slots: PlannedV2Slot
     }
   })
 
-  const blocks = scene.blocks.map((block, blockIndex) => {
+  const blocks: BlockConfig[] = scene.blocks.map((block, blockIndex) => {
     const slotId = assignments.get(blockIndex)
 
     if (!slotId) {
       return block
     }
 
+    // Embeds that happened to have a `region` already keep it; we don't
+    // v2-reassign embeds. (Assignments map is only populated for text blocks
+    // in the filtered loop above.)
     return {
       ...block,
       region: slotId,

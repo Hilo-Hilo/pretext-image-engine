@@ -6,6 +6,7 @@ type TextColorMode = 'fixed' | 'auto';
 type HighlightMode = 'off' | 'pill' | 'block' | 'auto';
 type FallbackMode = 'below' | 'none';
 type TextBlockScrollMode = 'static' | 'reveal' | 'sticky-start-reveal';
+type RevealUnit = 'line' | 'word' | 'char';
 type V2TextRole = 'eyebrow' | 'headline' | 'lede' | 'body' | 'caption' | 'cta' | 'annotation';
 type V2BackdropMode = 'auto' | 'none' | 'shadow' | 'line' | 'panel';
 type V2SubjectZoneKind = 'protect' | 'soft-protect';
@@ -91,6 +92,10 @@ interface ColumnSplitConfig {
 }
 interface InteractionConfig {
     selectable?: boolean;
+}
+interface RevealConfig {
+    unit?: RevealUnit;
+    monotonic?: boolean;
 }
 interface TextBlockScrollConfig {
     mode?: TextBlockScrollMode;
@@ -189,9 +194,14 @@ interface V2TextBlockConfig {
     preferredTone?: 'light' | 'dark' | 'auto';
 }
 interface TextBlockConfig {
+    /** Discriminator. Defaults to `'text'` when absent, for backward compatibility. */
+    kind?: 'text';
     id?: string;
     style: TextStyleName;
-    text: string;
+    text?: string;
+    lines?: string[];
+    marker?: string;
+    itemGap?: number;
     region?: string;
     regionOrder?: SlotOrder;
     allowMultiSlot?: boolean;
@@ -201,6 +211,52 @@ interface TextBlockConfig {
     scroll?: TextBlockScrollConfig;
     v2?: V2TextBlockConfig;
 }
+/**
+ * Non-text block. Placed inline in the reveal sequence alongside text: when
+ * scroll reveal reaches the embed's position, it fades in atomically (opacity
+ * 0→1 at the threshold), and text blocks that come after it reveal normally
+ * once the embed is past.
+ *
+ * The engine reserves `width × height` pixels in the target region and calls
+ * the `renderEmbed` option (supplied via `EngineOptions`) to populate the
+ * container with whatever DOM the consumer wants (link cards, PDFs, iframes,
+ * custom widgets). Factories live outside the engine so the engine stays free
+ * of domain-specific rendering code.
+ */
+interface EmbedBlockConfig {
+    /** Discriminator. */
+    kind: 'embed';
+    /** Stable id; useful for debug selectors and consumer-side dispatch. */
+    id?: string;
+    /** Registered factory name — `'link-card' | 'pdf' | 'iframe' | ...`. */
+    embedKind: string;
+    /** Named region to place this embed in; same semantics as text blocks. */
+    region?: string;
+    /** Ordering hint within the region (shared with text-block semantics). */
+    regionOrder?: SlotOrder;
+    /** Reserved width in pixels before `scale` is applied. */
+    width: number;
+    /** Reserved height in pixels before `scale` is applied. */
+    height: number;
+    /** Vertical gap below the embed, in px. Defaults to 14. */
+    gapAfter?: number;
+    /**
+     * Virtual "char cost" of this embed in the reveal sequence. Defaults to 20.
+     * Higher values give the embed more scroll runway before the next block
+     * reveals; lower values make the transition snappier.
+     */
+    revealCost?: number;
+    src?: string;
+    href?: string;
+    title?: string;
+    description?: string;
+    alt?: string;
+    sandbox?: string;
+    /** Escape hatch for custom factories that need extra data. */
+    props?: Record<string, unknown>;
+}
+/** Discriminated union of everything that can go in `scene.blocks`. */
+type BlockConfig = TextBlockConfig | EmbedBlockConfig;
 interface DebugConfig {
     enabled?: boolean;
     showSlots?: boolean;
@@ -216,10 +272,11 @@ interface ImageEngineSceneConfig {
     colors?: ColorConfig;
     columnSplit?: ColumnSplitConfig;
     interaction?: InteractionConfig;
+    reveal?: RevealConfig;
     debug?: DebugConfig;
     styles?: Record<string, BlockStyleConfig>;
     regions?: Record<string, RegionConfig>;
-    blocks: TextBlockConfig[];
+    blocks: BlockConfig[];
     v2?: V2SceneConfig;
 }
 interface EngineState {
@@ -232,6 +289,18 @@ interface EngineState {
 interface EngineOptions {
     injectStyles?: boolean;
     initialProgress?: number;
+    /**
+     * Called by the engine when it lays out an embed block. The engine supplies
+     * an empty container (already positioned absolutely at the embed's measured
+     * rect); the callback populates it with whatever DOM the embed kind needs.
+     *
+     * If absent, embed blocks are skipped silently (text-only fallback).
+     */
+    renderEmbed?: (config: EmbedBlockConfig, container: HTMLElement) => void;
+}
+interface ScrollSourceOptions {
+    easing?: (t: number) => number;
+    throttle?: 'raf' | 'none';
 }
 interface ImageTextEngine {
     readonly ready: Promise<void>;
@@ -239,6 +308,8 @@ interface ImageTextEngine {
     update(scene: ImageEngineSceneConfig): Promise<void>;
     render(): void;
     setProgress(progress: number): void;
+    onRender(listener: () => void): () => void;
+    attachScrollSource(target?: Window | HTMLElement, options?: ScrollSourceOptions): () => void;
     destroy(): void;
 }
 
@@ -269,13 +340,18 @@ declare class PretextImageEngine implements ImageTextEngine {
     private scene;
     private imageSignature;
     private pendingFrame;
+    private resizeDebounce;
     private activeLayout;
     private readonly lineElements;
+    private readonly renderListeners;
+    private peakProgress;
     readonly ready: Promise<void>;
     state: EngineState;
     constructor(container: HTMLElement, scene: ImageEngineSceneConfig, options?: EngineOptions);
     update(scene: ImageEngineSceneConfig): Promise<void>;
     setProgress(progress: number): void;
+    onRender(listener: () => void): () => void;
+    attachScrollSource(target?: Window | HTMLElement, options?: ScrollSourceOptions): () => void;
     render(): void;
     destroy(): void;
     private attachResizeObserver;
@@ -290,10 +366,32 @@ declare class PretextImageEngine implements ImageTextEngine {
     private resolveColumns;
     private orderSlots;
     private measureMaskedLayout;
+    private maybeAccumulatePanel;
     private applyMasked;
     private applyProgressProjection;
+    private applyUnitLevelProjection;
+    private splitTextIntoUnits;
+    private emitRender;
     private applyFallback;
 }
 declare const createPretextImageEngine: (container: HTMLElement, scene: ImageEngineSceneConfig, options?: EngineOptions) => ImageTextEngine;
 
-export { type BlockStyleConfig, type CSSColorValue, type ColorConfig, type ColumnSplitConfig, type DebugConfig, type EngineOptions, type EngineState, type HighlightConfig, type ImageEngineSceneConfig, type ImageTextEngine, type InteractionConfig, type LayoutConfig, PretextImageEngine, type RegionConfig, type ResizeConfig, type SceneAssetConfig, type SceneMeta, type StageConfig, type TextBlockConfig, type TextBlockScrollConfig, type TextBlockScrollMode, type TextColorConfig, type TextStyleName, createPretextImageEngine };
+interface CreateSceneInput {
+    baseSrc: string;
+    overlaySrc?: string;
+    blocks: TextBlockConfig[];
+    alt?: string;
+    name?: string;
+    aspectRatio?: number;
+}
+declare function createScene(input: CreateSceneInput, overrides?: Partial<ImageEngineSceneConfig>): ImageEngineSceneConfig;
+interface PerImageScene {
+    meta: SceneMeta;
+    assets: SceneAssetConfig;
+    regions: Record<string, RegionConfig>;
+    blocks: TextBlockConfig[];
+    stage?: Pick<StageConfig, 'aspectRatio'>;
+}
+declare function composeScene(defaults: Partial<ImageEngineSceneConfig>, perImage: PerImageScene): ImageEngineSceneConfig;
+
+export { type BlockConfig, type BlockStyleConfig, type CSSColorValue, type ColorConfig, type ColumnSplitConfig, type CreateSceneInput, type DebugConfig, type EmbedBlockConfig, type EngineOptions, type EngineState, type HighlightConfig, type ImageEngineSceneConfig, type ImageTextEngine, type InteractionConfig, type LayoutConfig, type PerImageScene, PretextImageEngine, type RegionConfig, type ResizeConfig, type RevealConfig, type RevealUnit, type SceneAssetConfig, type SceneMeta, type ScrollSourceOptions, type StageConfig, type TextBlockConfig, type TextBlockScrollConfig, type TextBlockScrollMode, type TextColorConfig, type TextStyleName, composeScene, createPretextImageEngine, createScene };

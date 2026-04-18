@@ -7,6 +7,7 @@ import type {
   InteractionConfig,
   LayoutConfig,
   ResizeConfig,
+  RevealConfig,
   ShadowConfig,
   StageConfig,
   TextBlockConfig,
@@ -85,6 +86,11 @@ export const DEFAULT_COLUMN_SPLIT: Required<ColumnSplitConfig> = {
 
 export const DEFAULT_INTERACTION: Required<InteractionConfig> = {
   selectable: false,
+}
+
+export const DEFAULT_REVEAL: Required<RevealConfig> = {
+  unit: 'line',
+  monotonic: false,
 }
 
 export const DEFAULT_BLOCK_STYLES: Record<string, Required<BlockStyleConfig>> = {
@@ -177,6 +183,7 @@ export const DEFAULT_SCENE: ImageEngineSceneConfig = {
   colors: DEFAULT_COLORS,
   columnSplit: DEFAULT_COLUMN_SPLIT,
   interaction: DEFAULT_INTERACTION,
+  reveal: DEFAULT_REVEAL,
   debug: {
     enabled: false,
     showSlots: false,
