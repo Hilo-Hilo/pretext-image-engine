@@ -1065,6 +1065,11 @@ export class PretextImageEngine implements ImageTextEngine {
       return
     }
 
+    const fallbackWidthBasis = Math.max(
+      0,
+      Math.round(this.doc.defaultView?.innerWidth ?? width),
+    )
+
     runtimeDebug.__pieLastRender = {
       reason: 'entered-render',
       width,
@@ -1072,6 +1077,7 @@ export class PretextImageEngine implements ImageTextEngine {
       preserveFullText: this.scene.resize.preserveFullText,
       fallbackMode: this.scene.resize.fallbackMode,
       fallbackBelowWidth: this.scene.layout.fallbackBelowWidth,
+      fallbackWidthBasis,
       fallbackOnOverflow: this.scene.resize.fallbackOnOverflow,
       v2Enabled: Boolean(this.scene.v2?.enabled),
     }
@@ -1106,12 +1112,13 @@ export class PretextImageEngine implements ImageTextEngine {
     const canFallback =
       this.scene.resize.preserveFullText && this.scene.resize.fallbackMode === 'below'
 
-    if (canFallback && width <= this.scene.layout.fallbackBelowWidth) {
+    if (canFallback && fallbackWidthBasis <= this.scene.layout.fallbackBelowWidth) {
       runtimeDebug.__pieLastRender = {
         ...(runtimeDebug.__pieLastRender ?? {}),
         reason: 'fallback-below-width',
         width,
         height,
+        fallbackWidthBasis,
       }
       this.applyFallback(this.scene.resize.fallbackLabel)
       return
