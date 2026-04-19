@@ -187,6 +187,7 @@ describe('PretextImageEngine', () => {
   })
 
   it('uses width fallback before overflow policy', async () => {
+    const originalInnerWidth = window.innerWidth
     const { container, engine, stage } = await mountEngine(
       createScene({
         layout: {
@@ -200,8 +201,16 @@ describe('PretextImageEngine', () => {
       }),
     )
 
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 320,
+    })
     setElementSize(stage, 320, 240)
     engine.render()
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: originalInnerWidth,
+    })
 
     expect(engine.state.layoutMode).toBe('fallback')
     expect(container.querySelector<HTMLElement>('.pie-fallback')?.hidden).toBe(false)
