@@ -1,4 +1,5 @@
 import { layoutNextLine, prepareWithSegments } from '@chenglou/pretext'
+import type { LayoutCursor, PreparedTextWithSegments } from '@chenglou/pretext'
 
 import {
   DEFAULT_BLOCK_STYLES,
@@ -382,6 +383,19 @@ const getFontMetrics = (
     lineHeightPx,
     font: `${fontStyle} ${style.fontWeight} ${fontSize}px ${style.fontFamily}`,
   }
+}
+
+const isLayoutCursorComplete = (
+  prepared: PreparedTextWithSegments & { text?: string },
+  cursor: LayoutCursor,
+): boolean => {
+  const segmentCount = Array.isArray(prepared.widths)
+    ? prepared.widths.length
+    : typeof prepared.text === 'string'
+      ? 1
+      : 0
+
+  return cursor.segmentIndex >= segmentCount
 }
 
 const resolveScrollConfig = (scroll?: TextBlockScrollConfig): ResolvedBlockScroll => {
@@ -1745,6 +1759,11 @@ export class PretextImageEngine implements ImageTextEngine {
           blockLineIndex += 1
           cursor = line.end
           placed = true
+
+          if (isLayoutCursorComplete(prepared, cursor)) {
+            blockFinished = true
+            break
+          }
         }
 
         if (placed) {

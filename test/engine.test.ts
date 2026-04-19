@@ -5,7 +5,7 @@ import { createPretextImageEngine } from '../src/lib'
 import { createScene, setCanvasState, setElementSize } from './setup'
 
 vi.mock('@chenglou/pretext', () => ({
-  prepareWithSegments: (text: string, font: string) => ({ text, font }),
+  prepareWithSegments: (text: string, font: string) => ({ text, font, widths: [text.length * 10] }),
   layoutNextLine: (
     prepared: { text: string },
     cursor: { segmentIndex: number; graphemeIndex: number },
@@ -184,6 +184,58 @@ describe('PretextImageEngine', () => {
     expect(container.querySelector<HTMLElement>('.pie-status-badge')?.textContent).toBe(
       'Text clipped inside the image at this size.',
     )
+  })
+
+  it('treats a line that exactly fills its region as complete', async () => {
+    const { container, engine, stage } = await mountEngine(
+      createScene({
+        layout: {
+          fallbackBelowWidth: 100,
+          horizontalPadding: 0,
+          minSlotWidth: 24,
+          outerPadding: 0,
+        },
+        resize: {
+          preserveFullText: true,
+          fallbackMode: 'below',
+          fallbackOnOverflow: false,
+        },
+        regions: {
+          kicker: {
+            xStart: 0,
+            xEnd: 1,
+            yStart: 0,
+            yEnd: 0.07,
+          },
+          body: {
+            xStart: 0,
+            xEnd: 1,
+            yStart: 0.2,
+            yEnd: 0.6,
+          },
+        },
+        blocks: [
+          {
+            id: 'kicker',
+            style: 'eyebrow',
+            region: 'kicker',
+            text: 'Kicker',
+          },
+          {
+            id: 'next',
+            style: 'body',
+            region: 'body',
+            text: 'Next',
+          },
+        ],
+      }),
+    )
+
+    setElementSize(stage, 200, 200)
+    engine.render()
+
+    expect(engine.state.layoutMode).toBe('masked')
+    expect(getMaskedLines(container).map((line) => line.textContent)).toEqual(['KICKER', 'Next'])
   })
 
   it('uses width fallback before overflow policy', async () => {
